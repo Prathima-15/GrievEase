@@ -310,15 +310,15 @@ const BrowsePetitionsPage: React.FC = () => {
                         <span className="text-xs text-gray-500">
                           Created by: {petition.createdBy}
                         </span>
-                        <Button 
-                          as={Link} 
-                          to={`/petitions/${petition.id}`}
-                          variant="outline"
-                          size="sm"
-                          className="text-primary-blue border-primary-blue hover:bg-blue-50"
-                        >
-                          View Details
-                        </Button>
+                        <Link to={`/petitions/${petition.id}`}>
+                          <Button 
+                            variant="outline"
+                            size="sm"
+                            className="text-primary-blue border-primary-blue hover:bg-blue-50"
+                          >
+                            View Details
+                          </Button>
+                        </Link>
                       </div>
                     </CardFooter>
                   </Card>

@@ -18,21 +18,21 @@ const HomePage: React.FC = () => {
                 Create petitions that matter, gather support from your community, and drive real change with Grieve Ease.
               </p>
               <div className="flex flex-col sm:flex-row gap-4">
-                <Button
-                  as={Link}
-                  to="/petitions/create"
-                  className="bg-primary-blue hover:bg-blue-600 text-white px-8 py-6 text-lg"
-                >
-                  Create a Petition
-                </Button>
-                <Button
-                  as={Link}
-                  to="/petitions"
-                  variant="outline"
-                  className="border-primary-blue text-primary-blue hover:bg-blue-50 px-8 py-6 text-lg"
-                >
-                  Browse Petitions
-                </Button>
+                <Link to="/petitions/create">
+                  <Button
+                    className="bg-primary-blue hover:bg-blue-600 text-white px-8 py-6 text-lg"
+                  >
+                    Create a Petition
+                  </Button>
+                </Link>
+                <Link to="/petitions">
+                  <Button
+                    variant="outline"
+                    className="border-primary-blue text-primary-blue hover:bg-blue-50 px-8 py-6 text-lg"
+                  >
+                    Browse Petitions
+                  </Button>
+                </Link>
               </div>
             </div>
             <div className="lg:w-1/2 flex justify-center lg:justify-end">
@@ -99,14 +99,14 @@ const HomePage: React.FC = () => {
           <p className="text-xl mb-8 opacity-90">
             Join thousands of citizens who have successfully created change in their communities.
           </p>
-          <Button
-            as={Link}
-            to="/sign-up"
-            variant="outline"
-            className="border-white text-white hover:bg-white/10 px-8 py-6 text-lg"
-          >
-            Get Started Today
-          </Button>
+          <Link to="/sign-up">
+            <Button
+              variant="outline"
+              className="border-white text-white hover:bg-white/10 px-8 py-6 text-lg"
+            >
+              Get Started Today
+            </Button>
+          </Link>
         </div>
       </section>
     </div>

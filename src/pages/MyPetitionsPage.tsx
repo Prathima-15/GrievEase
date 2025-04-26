@@ -103,14 +103,12 @@ const MyPetitionsPage: React.FC = () => {
             </p>
           </div>
           <div className="mt-4 md:mt-0">
-            <Button
-              as={Link}
-              to="/petitions/create"
-              className="bg-primary-blue hover:bg-blue-600"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Create New Petition
-            </Button>
+            <Link to="/petitions/create">
+              <Button className="bg-primary-blue hover:bg-blue-600">
+                <Plus className="h-4 w-4 mr-2" />
+                Create New Petition
+              </Button>
+            </Link>
           </div>
         </div>
         
@@ -191,15 +189,15 @@ const MyPetitionsPage: React.FC = () => {
                             <span className="text-gray-500">No updates yet</span>
                           )}
                         </div>
-                        <Button 
-                          as={Link}
-                          to={`/petitions/${petition.id}`}
-                          variant="outline"
-                          size="sm"
-                          className="text-primary-blue border-primary-blue hover:bg-blue-50"
-                        >
-                          View Details
-                        </Button>
+                        <Link to={`/petitions/${petition.id}`}>
+                          <Button 
+                            variant="outline"
+                            size="sm"
+                            className="text-primary-blue border-primary-blue hover:bg-blue-50"
+                          >
+                            View Details
+                          </Button>
+                        </Link>
                       </div>
                     </CardFooter>
                   </Card>
@@ -226,14 +224,12 @@ const MyPetitionsPage: React.FC = () => {
                     <p className="text-gray-600 mb-6">
                       You haven't created any petitions yet.
                     </p>
-                    <Button
-                      as={Link}
-                      to="/petitions/create"
-                      className="bg-primary-blue hover:bg-blue-600"
-                    >
-                      <Plus className="h-4 w-4 mr-2" />
-                      Create Your First Petition
-                    </Button>
+                    <Link to="/petitions/create">
+                      <Button className="bg-primary-blue hover:bg-blue-600">
+                        <Plus className="h-4 w-4 mr-2" />
+                        Create Your First Petition
+                      </Button>
+                    </Link>
                   </div>
                 )}
               </div>

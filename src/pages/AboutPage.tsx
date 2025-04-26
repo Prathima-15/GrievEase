@@ -31,7 +31,7 @@ const AboutPage: React.FC = () => {
               <div className="bg-soft-blue p-4 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
                 <MessageSquare size={24} className="text-primary-blue" />
               </div>
-              <h3 className="font-semibold text-xl mb-3">Accessibility</h3>
+              <h3 className="font-semibold text-lg mb-3">Accessibility</h3>
               <p className="text-gray-600">
                 Making it easy for all citizens, regardless of technical proficiency, to voice their concerns.
               </p>
@@ -41,7 +41,7 @@ const AboutPage: React.FC = () => {
               <div className="bg-soft-blue p-4 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
                 <Shield size={24} className="text-primary-blue" />
               </div>
-              <h3 className="font-semibold text-xl mb-3">Transparency</h3>
+              <h3 className="font-semibold text-lg mb-3">Transparency</h3>
               <p className="text-gray-600">
                 Ensuring that citizens can track the progress of their grievances at every step.
               </p>
@@ -51,7 +51,7 @@ const AboutPage: React.FC = () => {
               <div className="bg-soft-blue p-4 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
                 <CheckCircle size={24} className="text-primary-blue" />
               </div>
-              <h3 className="font-semibold text-xl mb-3">Accountability</h3>
+              <h3 className="font-semibold text-lg mb-3">Accountability</h3>
               <p className="text-gray-600">
                 Holding authorities accountable for timely resolution of citizen concerns.
               </p>
@@ -172,22 +172,22 @@ const AboutPage: React.FC = () => {
             Join thousands of citizens who are creating meaningful change in their communities.
           </p>
           <div className="flex flex-col sm:flex-row justify-center gap-4">
-            <Button
-              as={Link}
-              to="/petitions/create"
-              variant="default"
-              className="bg-white text-primary-blue hover:bg-gray-100 px-8 py-6 text-lg"
-            >
-              Create a Petition
-            </Button>
-            <Button
-              as={Link}
-              to="/petitions"
-              variant="outline"
-              className="border-white text-white hover:bg-white/10 px-8 py-6 text-lg"
-            >
-              Browse Petitions
-            </Button>
+            <Link to="/petitions/create">
+              <Button
+                variant="default"
+                className="bg-white text-primary-blue hover:bg-gray-100 px-8 py-6 text-lg"
+              >
+                Create a Petition
+              </Button>
+            </Link>
+            <Link to="/petitions">
+              <Button
+                variant="outline"
+                className="border-white text-white hover:bg-white/10 px-8 py-6 text-lg"
+              >
+                Browse Petitions
+              </Button>
+            </Link>
           </div>
         </div>
       </section>

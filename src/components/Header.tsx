@@ -90,14 +90,14 @@ const Header: React.FC = () => {
                 </Button>
               </div>
             ) : (
-              <Button
-                as={Link}
-                to="/sign-in"
-                variant="default"
-                className="bg-primary-blue hover:bg-blue-600 text-white"
-              >
-                Sign In
-              </Button>
+              <Link to="/sign-in">
+                <Button
+                  variant="default"
+                  className="bg-primary-blue hover:bg-blue-600 text-white"
+                >
+                  Sign In
+                </Button>
+              </Link>
             )}
           </div>
           
@@ -156,15 +156,14 @@ const Header: React.FC = () => {
                 </Button>
               </div>
             ) : (
-              <Button
-                as={Link}
-                to="/sign-in"
-                variant="default"
-                className="w-full bg-primary-blue hover:bg-blue-600 text-white"
-                onClick={() => setIsMenuOpen(false)}
-              >
-                Sign In
-              </Button>
+              <Link to="/sign-in" onClick={() => setIsMenuOpen(false)}>
+                <Button
+                  variant="default"
+                  className="w-full bg-primary-blue hover:bg-blue-600 text-white"
+                >
+                  Sign In
+                </Button>
+              </Link>
             )}
           </div>
         </div>
