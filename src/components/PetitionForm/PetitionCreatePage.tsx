@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -7,10 +6,11 @@ import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { ChevronLeft, ChevronRight, Map, Upload, CheckCircle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Map, Upload, CheckCircle, FileText, Image, Check } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import SpeechToText from './SpeechToText';
+import ProgressSteps from './ProgressSteps';
 
 // Categories
 const CATEGORIES = [
@@ -42,6 +42,13 @@ const PetitionCreatePage: React.FC = () => {
   
   const totalSteps = 4;
   
+  const steps = [
+    { title: 'Details', icon: <FileText className="w-5 h-5" /> },
+    { title: 'Description', icon: <FileText className="w-5 h-5" /> },
+    { title: 'Evidence', icon: <Image className="w-5 h-5" /> },
+    { title: 'Review', icon: <Check className="w-5 h-5" /> }
+  ];
+
   const handleNextStep = () => {
     if (currentStep < totalSteps) {
       setCurrentStep(currentStep + 1);
@@ -125,41 +132,7 @@ const PetitionCreatePage: React.FC = () => {
             Fill out the form below to submit your petition for review
           </p>
           
-          {/* Progress indicator */}
-          <div className="mb-8">
-            <div className="flex items-center justify-between">
-              {Array.from({ length: totalSteps - 1 }).map((_, index) => (
-                <div 
-                  key={index}
-                  className={`flex items-center ${
-                    index > 0 ? 'flex-1 justify-center' : 'justify-start'
-                  } ${
-                    index === totalSteps - 2 ? 'justify-end' : ''
-                  }`}
-                >
-                  <div 
-                    className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                      index + 1 <= currentStep 
-                        ? 'bg-primary-blue text-white' 
-                        : 'bg-gray-200 text-gray-600'
-                    }`}
-                  >
-                    {index + 1}
-                  </div>
-                  {index < totalSteps - 2 && (
-                    <div className={`h-1 flex-1 mx-4 ${
-                      index + 1 < currentStep ? 'bg-primary-blue' : 'bg-gray-200'
-                    }`}></div>
-                  )}
-                </div>
-              ))}
-            </div>
-            <div className="flex justify-between mt-2">
-              <div className="text-xs text-gray-600">Details</div>
-              <div className="text-xs text-gray-600">Description</div>
-              <div className="text-xs text-gray-600">Media & Location</div>
-            </div>
-          </div>
+          <ProgressSteps currentStep={currentStep} steps={steps} />
           
           <div className="bg-white rounded-lg shadow-lg p-6">
             {/* Step 1: Basic Details */}
