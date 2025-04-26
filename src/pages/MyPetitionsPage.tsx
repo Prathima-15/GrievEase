@@ -114,7 +114,7 @@ const MyPetitionsPage: React.FC = () => {
         
         <div className="bg-white rounded-lg shadow-lg p-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
-            <Tabs defaultValue="all" value={activeTab} onValueChange={setActiveTab} className="mb-4 md:mb-0">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-4 md:mb-0">
               <TabsList>
                 <TabsTrigger value="all">
                   All ({MOCK_MY_PETITIONS.length})
@@ -129,6 +129,99 @@ const MyPetitionsPage: React.FC = () => {
                   Completed ({completedCount})
                 </TabsTrigger>
               </TabsList>
+              
+              <div className="mt-6">
+                {filteredPetitions.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {filteredPetitions.map(petition => (
+                      <Card key={petition.id} className="overflow-hidden border border-gray-200 h-full flex flex-col">
+                        <CardContent className="p-6 flex-grow">
+                          <div className="flex justify-between items-start mb-3">
+                            <Badge className={`${STATUS_COLORS[petition.status as keyof typeof STATUS_COLORS]} font-normal`}>
+                              {petition.status}
+                            </Badge>
+                            <span className="text-sm text-gray-500">
+                              {formatDate(petition.createdAt)}
+                            </span>
+                          </div>
+                          
+                          <h3 className="font-semibold text-lg mb-2">
+                            <Link to={`/petitions/${petition.id}`} className="hover:text-primary-blue transition-colors">
+                              {petition.title}
+                            </Link>
+                          </h3>
+                          
+                          <p className="text-gray-600 text-sm mb-4 line-clamp-2">
+                            {petition.description}
+                          </p>
+                          
+                          <div className="flex items-center justify-between">
+                            <Badge variant="outline" className="bg-blue-50">
+                              {petition.category}
+                            </Badge>
+                            <span className="text-sm text-gray-600">
+                              <strong>{petition.signatureCount}</strong> signatures
+                            </span>
+                          </div>
+                        </CardContent>
+                        
+                        <CardFooter className="bg-gray-50 p-4 border-t">
+                          <div className="w-full flex justify-between items-center">
+                            <div className="text-sm">
+                              {petition.updates > 0 ? (
+                                <span className="text-primary-blue font-medium">
+                                  {petition.updates} {petition.updates === 1 ? 'update' : 'updates'}
+                                </span>
+                              ) : (
+                                <span className="text-gray-500">No updates yet</span>
+                              )}
+                            </div>
+                            <Link to={`/petitions/${petition.id}`}>
+                              <Button 
+                                variant="outline"
+                                size="sm"
+                                className="text-primary-blue border-primary-blue hover:bg-blue-50"
+                              >
+                                View Details
+                              </Button>
+                            </Link>
+                          </div>
+                        </CardFooter>
+                      </Card>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-12 bg-gray-50 rounded-lg">
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">No petitions found</h3>
+                    {searchQuery ? (
+                      <div>
+                        <p className="text-gray-600 mb-6">
+                          Try adjusting your search query.
+                        </p>
+                        <Button
+                          onClick={() => setSearchQuery('')}
+                          variant="outline"
+                          className="border-primary-blue text-primary-blue hover:bg-blue-50"
+                        >
+                          Clear Search
+                        </Button>
+                      </div>
+                    ) : (
+                      <div>
+                        <p className="text-gray-600 mb-6">
+                          You haven't created any petitions yet.
+                        </p>
+                        <Link to="/petitions/create">
+                          <Button className="bg-primary-blue hover:bg-blue-600">
+                            <Plus className="h-4 w-4 mr-2" />
+                            Create Your First Petition
+                          </Button>
+                        </Link>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </Tabs>
             
             <div className="relative">
@@ -142,99 +235,6 @@ const MyPetitionsPage: React.FC = () => {
               <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
             </div>
           </div>
-          
-          <TabsContent value={activeTab} className="mt-0">
-            {filteredPetitions.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {filteredPetitions.map(petition => (
-                  <Card key={petition.id} className="overflow-hidden border border-gray-200 h-full flex flex-col">
-                    <CardContent className="p-6 flex-grow">
-                      <div className="flex justify-between items-start mb-3">
-                        <Badge className={`${STATUS_COLORS[petition.status as keyof typeof STATUS_COLORS]} font-normal`}>
-                          {petition.status}
-                        </Badge>
-                        <span className="text-sm text-gray-500">
-                          {formatDate(petition.createdAt)}
-                        </span>
-                      </div>
-                      
-                      <h3 className="font-semibold text-lg mb-2">
-                        <Link to={`/petitions/${petition.id}`} className="hover:text-primary-blue transition-colors">
-                          {petition.title}
-                        </Link>
-                      </h3>
-                      
-                      <p className="text-gray-600 text-sm mb-4 line-clamp-2">
-                        {petition.description}
-                      </p>
-                      
-                      <div className="flex items-center justify-between">
-                        <Badge variant="outline" className="bg-blue-50">
-                          {petition.category}
-                        </Badge>
-                        <span className="text-sm text-gray-600">
-                          <strong>{petition.signatureCount}</strong> signatures
-                        </span>
-                      </div>
-                    </CardContent>
-                    
-                    <CardFooter className="bg-gray-50 p-4 border-t">
-                      <div className="w-full flex justify-between items-center">
-                        <div className="text-sm">
-                          {petition.updates > 0 ? (
-                            <span className="text-primary-blue font-medium">
-                              {petition.updates} {petition.updates === 1 ? 'update' : 'updates'}
-                            </span>
-                          ) : (
-                            <span className="text-gray-500">No updates yet</span>
-                          )}
-                        </div>
-                        <Link to={`/petitions/${petition.id}`}>
-                          <Button 
-                            variant="outline"
-                            size="sm"
-                            className="text-primary-blue border-primary-blue hover:bg-blue-50"
-                          >
-                            View Details
-                          </Button>
-                        </Link>
-                      </div>
-                    </CardFooter>
-                  </Card>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-12 bg-gray-50 rounded-lg">
-                <h3 className="text-lg font-medium text-gray-900 mb-2">No petitions found</h3>
-                {searchQuery ? (
-                  <div>
-                    <p className="text-gray-600 mb-6">
-                      Try adjusting your search query.
-                    </p>
-                    <Button
-                      onClick={() => setSearchQuery('')}
-                      variant="outline"
-                      className="border-primary-blue text-primary-blue hover:bg-blue-50"
-                    >
-                      Clear Search
-                    </Button>
-                  </div>
-                ) : (
-                  <div>
-                    <p className="text-gray-600 mb-6">
-                      You haven't created any petitions yet.
-                    </p>
-                    <Link to="/petitions/create">
-                      <Button className="bg-primary-blue hover:bg-blue-600">
-                        <Plus className="h-4 w-4 mr-2" />
-                        Create Your First Petition
-                      </Button>
-                    </Link>
-                  </div>
-                )}
-              </div>
-            )}
-          </TabsContent>
         </div>
       </div>
     </div>
