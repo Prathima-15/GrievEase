@@ -1,3 +1,4 @@
+
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -42,6 +43,47 @@ const SignInPage: React.FC = () => {
   const formatPhoneNumber = (value: string) => {
     const phoneNumber = value.replace(/\D/g, '');
     return phoneNumber.length <= 10 ? phoneNumber : phoneNumber.slice(0, 10);
+  };
+
+  // Implementing the missing handleSendOtp function
+  const handleSendOtp = async () => {
+    setIsSubmitting(true);
+    
+    try {
+      if (activeTab === 'phone' && phone.length < 10) {
+        toast({
+          title: "Invalid phone number",
+          description: "Please enter a valid phone number",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      if (activeTab === 'email' && !email.includes('@')) {
+        toast({
+          title: "Invalid email",
+          description: "Please enter a valid email address",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      // Always require password first
+      toast({
+        title: "Password required",
+        description: "Please enter your password to sign in",
+      });
+      
+    } catch (error) {
+      console.error("Error sending OTP:", error);
+      toast({
+        title: "Failed to send OTP",
+        description: "Please try again later",
+        variant: "destructive"
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleSignIn = async () => {
