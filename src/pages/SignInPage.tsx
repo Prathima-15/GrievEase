@@ -4,10 +4,16 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, Phone, Mail } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import Logo from '@/components/Logo';
 import { Link } from 'react-router-dom';
+import {
+  InputOTP,
+  InputOTPGroup,
+  InputOTPSlot
+} from "@/components/ui/input-otp";
+import { useToast } from '@/hooks/use-toast';
 
 const SignInPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'phone' | 'email'>('phone');
@@ -16,37 +22,21 @@ const SignInPage: React.FC = () => {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showOtpInput, setShowOtpInput] = useState(false);
-  const [otp, setOtp] = useState(['', '', '', '', '', '']);
+  const [otp, setOtp] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   
   const { signIn } = useAuth();
   const navigate = useNavigate();
+  const { toast } = useToast();
   
   const handleTabChange = (value: string) => {
     setActiveTab(value as 'phone' | 'email');
     setShowOtpInput(false);
-    setOtp(['', '', '', '', '', '']);
+    setOtp('');
   };
   
-  const handleOtpChange = (index: number, value: string) => {
-    if (value.length <= 1) {
-      const newOtp = [...otp];
-      newOtp[index] = value;
-      setOtp(newOtp);
-      
-      // Auto-focus next input
-      if (value && index < 5) {
-        const nextInput = document.getElementById(`otp-${index + 1}`);
-        nextInput?.focus();
-      }
-    }
-  };
-  
-  const handleKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Backspace' && !otp[index] && index > 0) {
-      const prevInput = document.getElementById(`otp-${index - 1}`);
-      prevInput?.focus();
-    }
+  const handleOtpChange = (value: string) => {
+    setOtp(value);
   };
   
   const formatPhoneNumber = (value: string) => {
@@ -64,13 +54,38 @@ const SignInPage: React.FC = () => {
     
     try {
       if (activeTab === 'phone') {
+        if (phone.length < 10) {
+          toast({
+            title: "Invalid phone number",
+            description: "Please enter a valid phone number",
+            variant: "destructive"
+          });
+          return;
+        }
         await signIn({ phone });
       } else {
+        if (!email.includes('@')) {
+          toast({
+            title: "Invalid email",
+            description: "Please enter a valid email address",
+            variant: "destructive"
+          });
+          return;
+        }
         await signIn({ email });
       }
       setShowOtpInput(true);
+      toast({
+        title: "OTP sent successfully",
+        description: `A 6-digit code has been sent to your ${activeTab === 'phone' ? 'phone' : 'email'}`,
+      });
     } catch (error) {
       console.error("Failed to send OTP:", error);
+      toast({
+        title: "Failed to send OTP",
+        description: "Please try again later",
+        variant: "destructive"
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -81,11 +96,20 @@ const SignInPage: React.FC = () => {
     
     try {
       if (showOtpInput) {
-        const otpValue = otp.join('');
+        if (otp.length !== 6) {
+          toast({
+            title: "Invalid OTP",
+            description: "Please enter a valid 6-digit OTP",
+            variant: "destructive"
+          });
+          setIsSubmitting(false);
+          return;
+        }
+
         if (activeTab === 'phone') {
-          await signIn({ phone, otp: otpValue });
+          await signIn({ phone, otp });
         } else {
-          await signIn({ email, otp: otpValue });
+          await signIn({ email, otp });
         }
       } else {
         if (activeTab === 'phone') {
@@ -98,6 +122,11 @@ const SignInPage: React.FC = () => {
       navigate('/');
     } catch (error) {
       console.error("Sign in failed:", error);
+      toast({
+        title: "Authentication failed",
+        description: "Please check your credentials and try again",
+        variant: "destructive"
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -114,8 +143,14 @@ const SignInPage: React.FC = () => {
         
         <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
           <TabsList className="grid grid-cols-2 mb-6">
-            <TabsTrigger value="phone">Phone</TabsTrigger>
-            <TabsTrigger value="email">Email</TabsTrigger>
+            <TabsTrigger value="phone" className="flex items-center gap-2">
+              <Phone className="h-4 w-4" />
+              Phone
+            </TabsTrigger>
+            <TabsTrigger value="email" className="flex items-center gap-2">
+              <Mail className="h-4 w-4" />
+              Email
+            </TabsTrigger>
           </TabsList>
           
           <TabsContent value="phone" className="space-y-4">
@@ -178,22 +213,19 @@ const SignInPage: React.FC = () => {
                 <p className="text-xs text-gray-500 mb-3">
                   A 6-digit code has been sent to your phone number
                 </p>
-                <div className="flex justify-between mb-4">
-                  {otp.map((digit, index) => (
-                    <Input
-                      key={index}
-                      id={`otp-${index}`}
-                      type="text"
-                      value={digit}
-                      onChange={(e) => handleOtpChange(index, e.target.value)}
-                      onKeyDown={(e) => handleKeyDown(index, e)}
-                      className="w-12 h-12 text-center text-lg"
-                      maxLength={1}
-                      autoComplete="one-time-code"
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                    />
-                  ))}
+                <div className="flex justify-center mb-4">
+                  <InputOTP
+                    maxLength={6}
+                    value={otp}
+                    onChange={handleOtpChange}
+                    render={({ slots }) => (
+                      <InputOTPGroup>
+                        {slots.map((slot, index) => (
+                          <InputOTPSlot key={index} {...slot} />
+                        ))}
+                      </InputOTPGroup>
+                    )}
+                  />
                 </div>
                 <div className="text-center">
                   <button
@@ -201,7 +233,7 @@ const SignInPage: React.FC = () => {
                     className="text-sm text-primary-blue hover:underline"
                     onClick={() => {
                       setShowOtpInput(false);
-                      setOtp(['', '', '', '', '', '']);
+                      setOtp('');
                     }}
                   >
                     Back to sign in
@@ -270,22 +302,19 @@ const SignInPage: React.FC = () => {
                 <p className="text-xs text-gray-500 mb-3">
                   A 6-digit code has been sent to your email address
                 </p>
-                <div className="flex justify-between mb-4">
-                  {otp.map((digit, index) => (
-                    <Input
-                      key={index}
-                      id={`otp-email-${index}`}
-                      type="text"
-                      value={digit}
-                      onChange={(e) => handleOtpChange(index, e.target.value)}
-                      onKeyDown={(e) => handleKeyDown(index, e)}
-                      className="w-12 h-12 text-center text-lg"
-                      maxLength={1}
-                      autoComplete="one-time-code"
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                    />
-                  ))}
+                <div className="flex justify-center mb-4">
+                  <InputOTP
+                    maxLength={6}
+                    value={otp}
+                    onChange={handleOtpChange}
+                    render={({ slots }) => (
+                      <InputOTPGroup>
+                        {slots.map((slot, index) => (
+                          <InputOTPSlot key={index} {...slot} />
+                        ))}
+                      </InputOTPGroup>
+                    )}
+                  />
                 </div>
                 <div className="text-center">
                   <button
@@ -293,7 +322,7 @@ const SignInPage: React.FC = () => {
                     className="text-sm text-primary-blue hover:underline"
                     onClick={() => {
                       setShowOtpInput(false);
-                      setOtp(['', '', '', '', '', '']);
+                      setOtp('');
                     }}
                   >
                     Back to sign in
@@ -308,7 +337,7 @@ const SignInPage: React.FC = () => {
           {showOtpInput ? (
             <Button
               onClick={handleSignIn}
-              disabled={otp.some((digit) => digit === '') || isSubmitting}
+              disabled={otp.length < 6 || isSubmitting}
               className="w-full bg-primary-blue hover:bg-blue-600"
             >
               {isSubmitting ? "Verifying..." : "Verify OTP"}
