@@ -32,6 +32,7 @@ const SignInPage: React.FC = () => {
     setActiveTab(value as 'phone' | 'email');
     setShowOtpInput(false);
     setOtp('');
+    setPassword('');
   };
   
   const handleOtpChange = (value: string) => {
@@ -40,20 +41,24 @@ const SignInPage: React.FC = () => {
   
   const formatPhoneNumber = (value: string) => {
     const phoneNumber = value.replace(/\D/g, '');
-    
-    if (phoneNumber.length <= 10) {
-      return phoneNumber;
-    }
-    
-    return phoneNumber.slice(0, 10);
+    return phoneNumber.length <= 10 ? phoneNumber : phoneNumber.slice(0, 10);
   };
-  
-  const handleSendOtp = async () => {
+
+  const handleSignIn = async () => {
     setIsSubmitting(true);
     
     try {
-      if (activeTab === 'phone') {
-        if (phone.length < 10) {
+      if (!showOtpInput) {
+        if (!password) {
+          toast({
+            title: "Password required",
+            description: "Please enter your password",
+            variant: "destructive"
+          });
+          return;
+        }
+
+        if (activeTab === 'phone' && phone.length < 10) {
           toast({
             title: "Invalid phone number",
             description: "Please enter a valid phone number",
@@ -61,9 +66,8 @@ const SignInPage: React.FC = () => {
           });
           return;
         }
-        await signIn({ phone });
-      } else {
-        if (!email.includes('@')) {
+
+        if (activeTab === 'email' && !email.includes('@')) {
           toast({
             title: "Invalid email",
             description: "Please enter a valid email address",
@@ -71,54 +75,30 @@ const SignInPage: React.FC = () => {
           });
           return;
         }
-        await signIn({ email });
-      }
-      setShowOtpInput(true);
-      toast({
-        title: "OTP sent successfully",
-        description: `A 6-digit code has been sent to your ${activeTab === 'phone' ? 'phone' : 'email'}`,
-      });
-    } catch (error) {
-      console.error("Failed to send OTP:", error);
-      toast({
-        title: "Failed to send OTP",
-        description: "Please try again later",
-        variant: "destructive"
-      });
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-  
-  const handleSignIn = async () => {
-    setIsSubmitting(true);
-    
-    try {
-      if (showOtpInput) {
+
+        await signIn({
+          phone: activeTab === 'phone' ? phone : undefined,
+          email: activeTab === 'email' ? email : undefined,
+          password
+        });
+        setShowOtpInput(true);
+      } else {
         if (otp.length !== 6) {
           toast({
             title: "Invalid OTP",
             description: "Please enter a valid 6-digit OTP",
             variant: "destructive"
           });
-          setIsSubmitting(false);
           return;
         }
 
-        if (activeTab === 'phone') {
-          await signIn({ phone, otp });
-        } else {
-          await signIn({ email, otp });
-        }
-      } else {
-        if (activeTab === 'phone') {
-          await signIn({ phone, password });
-        } else {
-          await signIn({ email, password });
-        }
+        await signIn({
+          phone: activeTab === 'phone' ? phone : undefined,
+          email: activeTab === 'email' ? email : undefined,
+          otp
+        });
+        navigate('/');
       }
-      
-      navigate('/');
     } catch (error) {
       console.error("Sign in failed:", error);
       toast({

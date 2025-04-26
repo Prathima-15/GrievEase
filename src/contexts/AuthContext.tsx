@@ -1,4 +1,3 @@
-
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
 
@@ -38,7 +37,11 @@ const ADMIN_USER = {
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [pendingOtpVerification, setPendingOtpVerification] = useState<{email?: string; phone?: string} | null>(null);
+  const [pendingOtpVerification, setPendingOtpVerification] = useState<{
+    email?: string; 
+    phone?: string;
+    passwordVerified?: boolean;
+  } | null>(null);
   const { toast } = useToast();
 
   // Check for stored authentication on component mount
@@ -59,12 +62,39 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsLoading(true);
     
     try {
-      // For demo, we'll implement a simple authentication mechanism
-      if (credentials.otp) {
-        // Handle OTP verification
+      if (credentials.password && !pendingOtpVerification?.passwordVerified) {
+        // First step: Verify password
+        if ((credentials.email === ADMIN_USER.email || credentials.phone === ADMIN_USER.phone) && 
+            credentials.password === ADMIN_USER.password) {
+          // Password is correct, store pending verification
+          setPendingOtpVerification({
+            email: credentials.email,
+            phone: credentials.phone,
+            passwordVerified: true
+          });
+          
+          toast({
+            title: "Password verified",
+            description: "Please enter the OTP sent to your phone/email",
+          });
+        } else {
+          // For demo, accept any password for non-admin users
+          setPendingOtpVerification({
+            email: credentials.email,
+            phone: credentials.phone,
+            passwordVerified: true
+          });
+          
+          toast({
+            title: "Password verified",
+            description: "Please enter the OTP sent to your phone/email",
+          });
+        }
+      } else if (credentials.otp && pendingOtpVerification?.passwordVerified) {
+        // Second step: Verify OTP
         if (credentials.otp === '123456') { // Mock OTP
-          if (pendingOtpVerification?.phone === ADMIN_USER.phone || 
-              pendingOtpVerification?.email === ADMIN_USER.email) {
+          if (pendingOtpVerification.phone === ADMIN_USER.phone || 
+              pendingOtpVerification.email === ADMIN_USER.email) {
             setUser(ADMIN_USER);
             localStorage.setItem('grieveEaseUser', JSON.stringify(ADMIN_USER));
             toast({
@@ -77,8 +107,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               id: Math.random().toString(36).substring(2, 9),
               firstName: 'Demo',
               lastName: 'User',
-              email: pendingOtpVerification?.email || 'demo@example.com',
-              phone: pendingOtpVerification?.phone || '1234567890',
+              email: pendingOtpVerification.email || 'demo@example.com',
+              phone: pendingOtpVerification.phone || '1234567890',
               role: 'user',
             };
             
@@ -98,53 +128,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             variant: "destructive",
           });
         }
-      } else if (credentials.password) {
-        // Handle password-based login
-        if (credentials.email === ADMIN_USER.email && 
-            credentials.password === ADMIN_USER.password) {
-          setUser(ADMIN_USER);
-          localStorage.setItem('grieveEaseUser', JSON.stringify(ADMIN_USER));
-          toast({
-            title: "Signed in successfully",
-            description: "Welcome back, " + ADMIN_USER.firstName,
-          });
-        } else if (credentials.phone === ADMIN_USER.phone && 
-                 credentials.password === ADMIN_USER.password) {
-          setUser(ADMIN_USER);
-          localStorage.setItem('grieveEaseUser', JSON.stringify(ADMIN_USER));
-          toast({
-            title: "Signed in successfully",
-            description: "Welcome back, " + ADMIN_USER.firstName,
-          });
-        } else {
-          // For demo purposes, allow any other login
-          const mockUser: User = {
-            id: Math.random().toString(36).substring(2, 9),
-            firstName: 'Demo',
-            lastName: 'User',
-            email: credentials.email || 'demo@example.com',
-            phone: credentials.phone || '1234567890',
-            role: 'user',
-          };
-          
-          setUser(mockUser);
-          localStorage.setItem('grieveEaseUser', JSON.stringify(mockUser));
-          
-          toast({
-            title: "Signed in successfully",
-            description: "Welcome back, Demo User",
-          });
-        }
       } else {
-        // Store pending verification for OTP
-        setPendingOtpVerification({
-          email: credentials.email,
-          phone: credentials.phone
-        });
-        
         toast({
-          title: "OTP Sent",
-          description: "Please check your phone/email for the OTP",
+          title: "Invalid request",
+          description: "Please enter your password first",
+          variant: "destructive",
         });
       }
     } catch (error) {
