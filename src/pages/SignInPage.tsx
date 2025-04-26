@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -220,8 +219,8 @@ const SignInPage: React.FC = () => {
                     onChange={handleOtpChange}
                     render={({ slots }) => (
                       <InputOTPGroup>
-                        {slots.map((slot, index) => (
-                          <InputOTPSlot key={index} {...slot} />
+                        {slots.map((slot, i) => (
+                          <InputOTPSlot key={i} {...slot} index={i} />
                         ))}
                       </InputOTPGroup>
                     )}
@@ -309,8 +308,8 @@ const SignInPage: React.FC = () => {
                     onChange={handleOtpChange}
                     render={({ slots }) => (
                       <InputOTPGroup>
-                        {slots.map((slot, index) => (
-                          <InputOTPSlot key={index} {...slot} />
+                        {slots.map((slot, i) => (
+                          <InputOTPSlot key={i} {...slot} index={i} />
                         ))}
                       </InputOTPGroup>
                     )}
