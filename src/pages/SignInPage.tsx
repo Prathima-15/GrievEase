@@ -45,7 +45,6 @@ const SignInPage: React.FC = () => {
     return phoneNumber.length <= 10 ? phoneNumber : phoneNumber.slice(0, 10);
   };
 
-  // Implementing the missing handleSendOtp function
   const handleSendOtp = async () => {
     setIsSubmitting(true);
     
@@ -214,29 +213,31 @@ const SignInPage: React.FC = () => {
             </div>
 
             {/* OTP Input */}
-            <div className="space-y-2">
-              <label htmlFor="otp" className="block text-sm font-medium text-gray-700">
-                Enter OTP
-              </label>
-              <div className="flex space-x-4">
-                <Input
-                  id="otp"
-                  type="text"
-                  placeholder="Enter OTP"
-                  value={otp}
-                  onChange={(e) => setOtp(e.target.value)}
-                  className="w-full"
-                  maxLength={6}
-                />
-                <Button
-                  onClick={handleSendOtp}
-                  disabled={isSubmitting || phone.length < 10}
-                  className="bg-primary-blue hover:bg-blue-600"
-                >
-                  {isSubmitting ? "Sending..." : "Send OTP"}
-                </Button>
+            {showOtpInput && (
+              <div className="space-y-2">
+                <label htmlFor="otp" className="block text-sm font-medium text-gray-700">
+                  Enter OTP
+                </label>
+                <div className="flex space-x-4">
+                  <Input
+                    id="otp"
+                    type="text"
+                    placeholder="Enter OTP"
+                    value={otp}
+                    onChange={(e) => setOtp(e.target.value)}
+                    className="w-full"
+                    maxLength={6}
+                  />
+                  <Button
+                    onClick={handleSendOtp}
+                    disabled={isSubmitting || phone.length < 10}
+                    className="bg-primary-blue hover:bg-blue-600"
+                  >
+                    {isSubmitting ? "Sending..." : "Resend OTP"}
+                  </Button>
+                </div>
               </div>
-            </div>
+            )}
           </TabsContent>
           
           <TabsContent value="email" className="space-y-4">
@@ -278,29 +279,31 @@ const SignInPage: React.FC = () => {
             </div>
 
             {/* OTP Input */}
-            <div className="space-y-2">
-              <label htmlFor="otp" className="block text-sm font-medium text-gray-700">
-                Enter OTP
-              </label>
-              <div className="flex space-x-4">
-                <Input
-                  id="otp"
-                  type="text"
-                  placeholder="Enter OTP"
-                  value={otp}
-                  onChange={(e) => setOtp(e.target.value)}
-                  className="w-full"
-                  maxLength={6}
-                />
-                <Button
-                  onClick={handleSendOtp}
-                  disabled={isSubmitting || !email.includes("@")}
-                  className="bg-primary-blue hover:bg-blue-600"
-                >
-                  {isSubmitting ? "Sending..." : "Send OTP"}
-                </Button>
+            {showOtpInput && (
+              <div className="space-y-2">
+                <label htmlFor="otp" className="block text-sm font-medium text-gray-700">
+                  Enter OTP
+                </label>
+                <div className="flex space-x-4">
+                  <Input
+                    id="otp"
+                    type="text"
+                    placeholder="Enter OTP"
+                    value={otp}
+                    onChange={(e) => setOtp(e.target.value)}
+                    className="w-full"
+                    maxLength={6}
+                  />
+                  <Button
+                    onClick={handleSendOtp}
+                    disabled={isSubmitting || !email.includes("@")}
+                    className="bg-primary-blue hover:bg-blue-600"
+                  >
+                    {isSubmitting ? "Sending..." : "Resend OTP"}
+                  </Button>
+                </div>
               </div>
-            </div>
+            )}
           </TabsContent>
         </Tabs>
         
@@ -314,25 +317,18 @@ const SignInPage: React.FC = () => {
               {isSubmitting ? "Verifying..." : "Verify OTP"}
             </Button>
           ) : (
-            <>
-              <Button
-                onClick={password ? handleSignIn : handleSendOtp}
-                disabled={
-                  (activeTab === 'phone' && phone.length < 10) ||
-                  (activeTab === 'email' && !email.includes('@')) ||
-                  isSubmitting
-                }
-                className="w-full bg-primary-blue hover:bg-blue-600"
-              >
-                {isSubmitting ? "Processing..." : "Sign In"}
-              </Button>
-              
-              {!password && (
-                <p className="text-xs text-center text-gray-500 mt-2">
-                  Or sign in with password
-                </p>
-              )}
-            </>
+            <Button
+              onClick={handleSignIn}
+              disabled={
+                (activeTab === 'phone' && phone.length < 10) ||
+                (activeTab === 'email' && !email.includes('@')) ||
+                !password ||
+                isSubmitting
+              }
+              className="w-full bg-primary-blue hover:bg-blue-600"
+            >
+              {isSubmitting ? "Processing..." : "Sign In"}
+            </Button>
           )}
         </div>
         
