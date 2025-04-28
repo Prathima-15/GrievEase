@@ -7,9 +7,9 @@ const AboutPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Hero Section */}
-      <section className="bg-primary-blue text-white py-20 px-4">
+      <section className="bg-bg-light-blue text-black py-20 px-4">
         <div className="container mx-auto max-w-4xl text-center">
-          <h1 className="text-4xl md:text-5xl font-bold mb-6">About Grieve Ease</h1>
+          <h1 className="text-4xl md:text-5xl font-bold mb-6">About Griev Ease</h1>
           <p className="text-xl opacity-90 mb-0 max-w-2xl mx-auto">
             We're building a platform that connects citizens with authorities to resolve grievances efficiently and transparently.
           </p>
@@ -22,7 +22,7 @@ const AboutPage: React.FC = () => {
           <div className="text-center mb-12">
             <h2 className="text-3xl font-bold mb-6">Our Mission</h2>
             <p className="text-xl text-gray-700 max-w-3xl mx-auto">
-              Grieve Ease aims to transform the way citizens interact with government agencies by providing a streamlined platform for submitting, tracking, and resolving grievances.
+              Griev Ease aims to transform the way citizens interact with government agencies by providing a streamlined platform for submitting, tracking, and resolving grievances.
             </p>
           </div>
           
@@ -127,10 +127,10 @@ const AboutPage: React.FC = () => {
       
       {/* Team Section */}
       <section className="py-16 px-4">
-        <div className="container mx-auto max-w-4xl">
+        <div className="container mx-auto ">
           <h2 className="text-3xl font-bold mb-12 text-center">Our Team</h2>
           
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-8">
             <div className="text-center">
               <img 
                 src="https://images.unsplash.com/photo-1649972904349-6e44c42644a7"
@@ -160,12 +160,22 @@ const AboutPage: React.FC = () => {
               <h3 className="font-semibold text-lg">Priya Sharma</h3>
               <p className="text-gray-600">Head of Operations</p>
             </div>
+
+            <div className="text-center">
+              <img 
+                src="https://images.unsplash.com/photo-1581091226825-a6a2a5aee158"
+                alt="Team Member"
+                className="w-32 h-32 rounded-full mx-auto mb-4 object-cover"
+              />
+              <h3 className="font-semibold text-lg">Priya Sharma</h3>
+              <p className="text-gray-600">Head of Operations</p>
+            </div>
           </div>
         </div>
       </section>
       
       {/* CTA Section */}
-      <section className="bg-primary-blue text-white py-16 px-4">
+      <section className="bg-bg-light-blue text-black py-16 px-4">
         <div className="container mx-auto max-w-4xl text-center">
           <h2 className="text-3xl font-bold mb-6">Ready to make your voice heard?</h2>
           <p className="text-xl mb-8 opacity-90 max-w-2xl mx-auto">
@@ -174,8 +184,8 @@ const AboutPage: React.FC = () => {
           <div className="flex flex-col sm:flex-row justify-center gap-4">
             <Link to="/petitions/create">
               <Button
-                variant="default"
-                className="bg-white text-primary-blue hover:bg-gray-100 px-8 py-6 text-lg"
+                variant="outline"
+                className="bg-primary-blue hover:bg-blue-600 text-white px-8 py-6 text-lg"
               >
                 Create a Petition
               </Button>
@@ -183,7 +193,7 @@ const AboutPage: React.FC = () => {
             <Link to="/petitions">
               <Button
                 variant="outline"
-                className="border-white text-white hover:bg-white/10 px-8 py-6 text-lg"
+                className="border-primary-blue text-primary-blue hover:bg-blue-50 px-8 py-6 text-lg"
               >
                 Browse Petitions
               </Button>

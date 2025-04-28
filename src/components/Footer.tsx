@@ -10,10 +10,10 @@ const Footer: React.FC = () => {
           <div className="col-span-1 md:col-span-2">
             <Logo className="mb-4" />
             <p className="text-gray-600 mb-4 max-w-md">
-              Grieve Ease is a platform that helps citizens create and submit grievance petitions to the appropriate authorities.
+              Griev Ease is a platform that helps citizens create and submit grievance petitions to the appropriate authorities.
             </p>
             <p className="text-sm text-gray-500">
-              © {new Date().getFullYear()} Grieve Ease. All rights reserved.
+              © {new Date().getFullYear()} Griev Ease. All rights reserved.
             </p>
           </div>
           

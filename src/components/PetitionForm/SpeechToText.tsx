@@ -105,7 +105,7 @@ const SpeechToText: React.FC<SpeechToTextProps> = ({
             disabled={isProcessing}
           >
             {isListening ? (
-              <StopCircle className="h-5 w-5" />
+              <StopCircle className="h-6 w-8" />
             ) : (
               <Mic className="h-5 w-5" />
             )}

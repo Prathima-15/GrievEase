@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
-import { Eye, EyeOff, Phone, Mail } from 'lucide-react';
+import { Phone, Mail } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import Logo from '@/components/Logo';
 import { Link } from 'react-router-dom';
@@ -153,182 +153,132 @@ const SignInPage: React.FC = () => {
           </TabsList>
           
           <TabsContent value="phone" className="space-y-4">
+            {/* Phone Number Input */}
             <div className="space-y-2">
               <label htmlFor="phone" className="block text-sm font-medium text-gray-700">
-                Phone Number
+                Mobile Number
               </label>
               <Input
                 id="phone"
                 type="tel"
-                placeholder="+91 XXXXXXXXXX"
+                placeholder="Mobile number"
                 value={phone}
                 onChange={(e) => setPhone(formatPhoneNumber(e.target.value))}
                 className="w-full"
-                disabled={showOtpInput || isSubmitting}
+                disabled={isSubmitting}
                 maxLength={10}
               />
             </div>
-            
-            {!showOtpInput && (
-              <div className="space-y-2">
-                <div className="flex justify-between items-center">
-                  <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-                    Password
-                  </label>
-                  <Link to="/forgot-password" className="text-xs text-primary-blue hover:underline">
-                    Forgot password?
-                  </Link>
-                </div>
-                <div className="relative">
-                  <Input
-                    id="password"
-                    type={showPassword ? "text" : "password"}
-                    placeholder="Enter your password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full pr-10"
-                    disabled={isSubmitting}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 focus:outline-none"
-                  >
-                    {showPassword ? (
-                      <EyeOff className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
-                    )}
-                  </button>
-                </div>
-              </div>
-            )}
-            
-            {showOtpInput && (
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">
-                  Enter OTP
+
+            {/* Password Input */}
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+                  Password
                 </label>
-                <p className="text-xs text-gray-500 mb-3">
-                  A 6-digit code has been sent to your phone number
-                </p>
-                <div className="flex justify-center mb-4">
-                  <InputOTP
-                    maxLength={6}
-                    value={otp}
-                    onChange={handleOtpChange}
-                    render={({ slots }) => (
-                      <InputOTPGroup>
-                        {slots.map((slot, i) => (
-                          <InputOTPSlot key={i} {...slot} index={i} />
-                        ))}
-                      </InputOTPGroup>
-                    )}
-                  />
-                </div>
-                <div className="text-center">
-                  <button
-                    type="button"
-                    className="text-sm text-primary-blue hover:underline"
-                    onClick={() => {
-                      setShowOtpInput(false);
-                      setOtp('');
-                    }}
-                  >
-                    Back to sign in
-                  </button>
-                </div>
+                <Link to="/forgot-password" className="text-xs text-primary-blue hover:underline">
+                  Forgot password?
+                </Link>
               </div>
-            )}
+              <Input
+                id="password"
+                type={showPassword ? "text" : "password"}
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full"
+                disabled={isSubmitting}
+              />
+            </div>
+
+            {/* OTP Input */}
+            <div className="space-y-2">
+              <label htmlFor="otp" className="block text-sm font-medium text-gray-700">
+                Enter OTP
+              </label>
+              <div className="flex space-x-4">
+                <Input
+                  id="otp"
+                  type="text"
+                  placeholder="Enter OTP"
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value)}
+                  className="w-full"
+                  maxLength={6}
+                />
+                <Button
+                  onClick={handleSendOtp}
+                  disabled={isSubmitting || phone.length < 10}
+                  className="bg-primary-blue hover:bg-blue-600"
+                >
+                  {isSubmitting ? "Sending..." : "Send OTP"}
+                </Button>
+              </div>
+            </div>
           </TabsContent>
           
           <TabsContent value="email" className="space-y-4">
+            {/* Email Input */}
             <div className="space-y-2">
               <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-                Email Address
+                Email
               </label>
               <Input
                 id="email"
                 type="email"
-                placeholder="you@example.com"
+                placeholder="Email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full"
-                disabled={showOtpInput || isSubmitting}
+                disabled={isSubmitting}
               />
             </div>
-            
-            {!showOtpInput && (
-              <div className="space-y-2">
-                <div className="flex justify-between items-center">
-                  <label htmlFor="email-password" className="block text-sm font-medium text-gray-700">
-                    Password
-                  </label>
-                  <Link to="/forgot-password" className="text-xs text-primary-blue hover:underline">
-                    Forgot password?
-                  </Link>
-                </div>
-                <div className="relative">
-                  <Input
-                    id="email-password"
-                    type={showPassword ? "text" : "password"}
-                    placeholder="Enter your password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full pr-10"
-                    disabled={isSubmitting}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 focus:outline-none"
-                  >
-                    {showPassword ? (
-                      <EyeOff className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
-                    )}
-                  </button>
-                </div>
-              </div>
-            )}
-            
-            {showOtpInput && (
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">
-                  Enter OTP
+
+            {/* Password Input */}
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+                  Password
                 </label>
-                <p className="text-xs text-gray-500 mb-3">
-                  A 6-digit code has been sent to your email address
-                </p>
-                <div className="flex justify-center mb-4">
-                  <InputOTP
-                    maxLength={6}
-                    value={otp}
-                    onChange={handleOtpChange}
-                    render={({ slots }) => (
-                      <InputOTPGroup>
-                        {slots.map((slot, i) => (
-                          <InputOTPSlot key={i} {...slot} index={i} />
-                        ))}
-                      </InputOTPGroup>
-                    )}
-                  />
-                </div>
-                <div className="text-center">
-                  <button
-                    type="button"
-                    className="text-sm text-primary-blue hover:underline"
-                    onClick={() => {
-                      setShowOtpInput(false);
-                      setOtp('');
-                    }}
-                  >
-                    Back to sign in
-                  </button>
-                </div>
+                <Link to="/forgot-password" className="text-xs text-primary-blue hover:underline">
+                  Forgot password?
+                </Link>
               </div>
-            )}
+              <Input
+                id="email-password"
+                type={showPassword ? "text" : "password"}
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full"
+                disabled={isSubmitting}
+              />
+            </div>
+
+            {/* OTP Input */}
+            <div className="space-y-2">
+              <label htmlFor="otp" className="block text-sm font-medium text-gray-700">
+                Enter OTP
+              </label>
+              <div className="flex space-x-4">
+                <Input
+                  id="otp"
+                  type="text"
+                  placeholder="Enter OTP"
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value)}
+                  className="w-full"
+                  maxLength={6}
+                />
+                <Button
+                  onClick={handleSendOtp}
+                  disabled={isSubmitting || !email.includes("@")}
+                  className="bg-primary-blue hover:bg-blue-600"
+                >
+                  {isSubmitting ? "Sending..." : "Send OTP"}
+                </Button>
+              </div>
+            </div>
           </TabsContent>
         </Tabs>
         
@@ -352,11 +302,7 @@ const SignInPage: React.FC = () => {
                 }
                 className="w-full bg-primary-blue hover:bg-blue-600"
               >
-                {isSubmitting
-                  ? "Processing..."
-                  : password
-                    ? "Sign In"
-                    : "Send OTP"}
+                {isSubmitting ? "Processing..." : "Sign In"}
               </Button>
               
               {!password && (

@@ -95,7 +95,7 @@ const MyPetitionsPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="container mx-auto px-4 py-8">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8">
+        <div className="flex md:items-center md:justify-between mb-8">
           <div>
             <h1 className="text-3xl font-bold mb-2">My Petitions</h1>
             <p className="text-gray-600">
@@ -113,23 +113,35 @@ const MyPetitionsPage: React.FC = () => {
         </div>
         
         <div className="bg-white rounded-lg shadow-lg p-6">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
+          <div className="md:flex-row items-center justify-between mb-4">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-4 md:mb-0">
-              <TabsList>
-                <TabsTrigger value="all">
-                  All ({MOCK_MY_PETITIONS.length})
-                </TabsTrigger>
-                <TabsTrigger value="pending">
-                  Pending ({pendingCount})
-                </TabsTrigger>
-                <TabsTrigger value="in progress">
-                  In Progress ({inProgressCount})
-                </TabsTrigger>
-                <TabsTrigger value="completed">
-                  Completed ({completedCount})
-                </TabsTrigger>
-              </TabsList>
-              
+              <div className='flex'>
+                <TabsList>
+                  <TabsTrigger value="all">
+                    All ({MOCK_MY_PETITIONS.length})
+                  </TabsTrigger>
+                  <TabsTrigger value="pending">
+                    Pending ({pendingCount})
+                  </TabsTrigger>
+                  <TabsTrigger value="in progress">
+                    In Progress ({inProgressCount})
+                  </TabsTrigger>
+                  <TabsTrigger value="completed">
+                    Completed ({completedCount})
+                  </TabsTrigger>
+                </TabsList>
+                <div className="relative justify-end flex-grow flex">
+                  <Search className="absolute right-5 top-3 h-4 w-4 text-gray-400" />
+                  <Input
+                    type="text"
+                    placeholder="Search your petitions..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-10 w-full md:w-64"
+                  />
+                </div>
+              </div>
+
               <div className="mt-6">
                 {filteredPetitions.length > 0 ? (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -223,17 +235,6 @@ const MyPetitionsPage: React.FC = () => {
                 )}
               </div>
             </Tabs>
-            
-            <div className="relative">
-              <Input
-                type="text"
-                placeholder="Search your petitions..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 w-full md:w-64"
-              />
-              <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-            </div>
           </div>
         </div>
       </div>

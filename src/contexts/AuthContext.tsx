@@ -43,13 +43,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Check for stored authentication on component mount
   useEffect(() => {
-    const storedUser = localStorage.getItem('grieveEaseUser');
+    const storedUser = localStorage.getItem('grievEaseUser');
     if (storedUser) {
       try {
         setUser(JSON.parse(storedUser));
       } catch (error) {
         console.error('Failed to parse stored user:', error);
-        localStorage.removeItem('grieveEaseUser');
+        localStorage.removeItem('grievEaseUser');
       }
     }
     setIsLoading(false);

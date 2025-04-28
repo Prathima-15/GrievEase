@@ -5,7 +5,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Separator } from '@/components/ui/separator';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { ChevronLeft, ChevronRight, Map, Upload, CheckCircle, FileText, Image, Check } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
@@ -13,21 +12,21 @@ import SpeechToText from './SpeechToText';
 import ProgressSteps from './ProgressSteps';
 
 // Categories
-const CATEGORIES = [
-  'Infrastructure',
-  'Transportation',
-  'Healthcare',
-  'Education',
-  'Environment',
-  'Safety',
-  'Recreation',
-  'Others'
-];
+// const CATEGORIES = [
+//   'Infrastructure',
+//   'Transportation',
+//   'Healthcare',
+//   'Education',
+//   'Environment',
+//   'Safety',
+//   'Recreation',
+//   'Others'
+// ];
 
 const PetitionCreatePage: React.FC = () => {
   const [currentStep, setCurrentStep] = useState(1);
   const [title, setTitle] = useState('');
-  const [category, setCategory] = useState('');
+  // const [category, setCategory] = useState('');
   const [visibility, setVisibility] = useState('public');
   const [shortDescription, setShortDescription] = useState('');
   const [longDescription, setLongDescription] = useState('');
@@ -111,7 +110,8 @@ const PetitionCreatePage: React.FC = () => {
   };
   
   const validateStep1 = () => {
-    return title.length >= 10 && category !== '' && visibility !== '';
+    // return title.length >= 10 && category !== '' && visibility !== '';
+    return title.length >= 10 && visibility !== '';
   };
   
   const validateStep2 = () => {
@@ -165,7 +165,7 @@ const PetitionCreatePage: React.FC = () => {
                     </p>
                   </div>
                   
-                  <div>
+                  {/* <div>
                     <Label htmlFor="category" className="block mb-2">
                       Category*
                     </Label>
@@ -180,7 +180,7 @@ const PetitionCreatePage: React.FC = () => {
                         <option key={cat} value={cat}>{cat}</option>
                       ))}
                     </select>
-                  </div>
+                  </div> */}
                   
                   <div>
                     <Label className="block mb-2">
@@ -240,31 +240,13 @@ const PetitionCreatePage: React.FC = () => {
                     <Label htmlFor="longDescription" className="block mb-2">
                       Detailed Description* (Use speech-to-text if preferred)
                     </Label>
-                    <Tabs defaultValue="text" className="w-full">
-                      <TabsList>
-                        <TabsTrigger value="text">Type</TabsTrigger>
-                        <TabsTrigger value="speech">Speech-to-Text</TabsTrigger>
-                      </TabsList>
-                      <TabsContent value="text" className="mt-2">
-                        <textarea
-                          id="longDescription"
-                          value={longDescription}
-                          onChange={(e) => setLongDescription(e.target.value)}
-                          placeholder="Describe the issue in detail, including why it matters and what changes you're seeking..."
-                          className="w-full min-h-[200px] p-3 border border-blue-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-blue focus:border-transparent"
-                        />
-                        <p className="text-xs text-gray-500 mt-1 flex justify-end">
-                          {longDescription.length} characters (minimum 50)
-                        </p>
-                      </TabsContent>
-                      <TabsContent value="speech" className="mt-2">
-                        <SpeechToText
-                          onTranscriptChange={setLongDescription}
-                          value={longDescription}
-                          placeholder="Your speech will be transcribed here..."
-                        />
-                      </TabsContent>
-                    </Tabs>
+                    <div className="mt-2">
+                      <SpeechToText
+                        onTranscriptChange={setLongDescription}
+                        value={longDescription}
+                        placeholder="Your speech will be transcribed here..."
+                      />
+                    </div>
                   </div>
                 </div>
               </div>

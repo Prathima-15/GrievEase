@@ -69,8 +69,38 @@ const MOCK_PETITIONS = [
     signatureCount: 368,
     createdAt: '2025-04-12',
     createdBy: 'Dr. Vijay Reddy'
+  },
+  {
+    id: '7',
+    title: 'Request for free health camp',
+    description: 'Organizing a free health check-up camp in the underserved area of East Village.',
+    category: 'Healthcare',
+    status: 'Pending',
+    signatureCount: 368,
+    createdAt: '2025-04-12',
+    createdBy: 'Dr. Vijay Reddy'
+  },
+  {
+    id: '8',
+    title: 'Request for free health camp',
+    description: 'Organizing a free health check-up camp in the underserved area of East Village.',
+    category: 'Healthcare',
+    status: 'Pending',
+    signatureCount: 368,
+    createdAt: '2025-04-12',
+    createdBy: 'Dr. Vijay Reddy'
+  },
+  {
+    id: '9',
+    title: 'Request for free health camp',
+    description: 'Organizing a free health check-up camp in the underserved area of East Village.',
+    category: 'Healthcare',
+    status: 'Pending',
+    signatureCount: 368,
+    createdAt: '2025-04-12',
+    createdBy: 'Dr. Vijay Reddy'
   }
-];
+];  
 
 // Define status badge colors
 const STATUS_COLORS = {
@@ -239,7 +269,7 @@ const BrowsePetitionsPage: React.FC = () => {
           <div className="lg:w-3/4">
             {/* Search & Sort */}
             <div className="mb-8 flex flex-col md:flex-row gap-4">
-              <form onSubmit={handleSearch} className="flex-grow">
+              <form onSubmit={handleSearch} className="rounded-md border border-blue-border  flex-grow">
                 <div className="relative">
                   <Input
                     type="text"
