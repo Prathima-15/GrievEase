@@ -226,21 +226,59 @@ const SignUpPage: React.FC = () => {
         
         {/* Step indicator */}
         <div className="flex justify-between mb-8">
-          {[1, 2, 3, 4].map((step) => (
-            <div key={step} className="flex flex-col items-center">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                currentStep >= step ? 'bg-primary-blue text-white' : 'bg-gray-200 text-gray-600'
-              }`}>
-                {step}
-              </div>
-              <span className="text-xs mt-1 text-gray-600">
-                {step === 1 ? "Details" :
-                 step === 2 ? "Password" :
-                 step === 3 ? "Verify" :
-                 "Documents"}
-              </span>
+          {/* Step 1: Account */}
+          <div className="flex flex-col items-center">
+            <div
+              className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                currentStep >= 1 ? 'bg-primary-blue text-white' : 'bg-gray-200 text-gray-600'
+              }`}
+            >
+              1
             </div>
-          ))}
+            <span className="text-xs mt-1 text-gray-600">Account</span>
+          </div>
+
+          {/* Line between Step 1 and Step 2 */}
+          <div className="flex-1 flex items-center">
+            <div
+              className={`h-1 w-full ${
+                currentStep >= 2 ? 'bg-primary-blue' : 'bg-gray-200'
+              }`}
+            ></div>
+          </div>
+
+          {/* Step 2: Verification */}
+          <div className="flex flex-col items-center">
+            <div
+              className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                currentStep >= 2 ? 'bg-primary-blue text-white' : 'bg-gray-200 text-gray-600'
+              }`}
+            >
+              2
+            </div>
+            <span className="text-xs mt-1 text-gray-600">Verification</span>
+          </div>
+
+          {/* Line between Step 2 and Step 3 */}
+          <div className="flex-1 flex items-center">
+            <div
+              className={`h-1 w-full ${
+                currentStep >= 3 ? 'bg-primary-blue' : 'bg-gray-200'
+              }`}
+            ></div>
+          </div>
+
+          {/* Step 3: Success */}
+          <div className="flex flex-col items-center">
+            <div
+              className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                currentStep >= 3 ? 'bg-primary-blue text-white' : 'bg-gray-200 text-gray-600'
+              }`}
+            >
+              3
+            </div>
+            <span className="text-xs mt-1 text-gray-600">Success</span>
+          </div>
         </div>
         
         {/* Step 1: Personal Information */}
