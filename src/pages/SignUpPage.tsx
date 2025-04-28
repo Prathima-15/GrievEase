@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -7,8 +6,10 @@ import { useAuth } from '@/contexts/AuthContext';
 import Logo from '@/components/Logo';
 import { Link } from 'react-router-dom';
 import { Checkbox } from '@/components/ui/checkbox';
+import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp';
+import { useToast } from '@/hooks/use-toast';
 
-type SignUpStep = 1 | 2 | 3;
+type SignUpStep = 1 | 2 | 3 | 4;
 
 const SignUpPage: React.FC = () => {
   const [currentStep, setCurrentStep] = useState<SignUpStep>(1);
@@ -25,6 +26,8 @@ const SignUpPage: React.FC = () => {
   const [consent, setConsent] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [file, setFile] = useState<File | null>(null);
+  const [otp, setOtp] = useState('');
+  const { toast } = useToast();
   
   const { signUp } = useAuth();
   const navigate = useNavigate();
@@ -68,81 +71,6 @@ const SignUpPage: React.FC = () => {
     return phoneNumber.slice(0, 10);
   };
   
-  const validateStep1 = () => {
-    return (
-      firstName.trim() !== '' &&
-      lastName.trim() !== '' &&
-      email.includes('@') &&
-      phone.length === 10 &&
-      password.length >= 8 &&
-      password === confirmPassword
-    );
-  };
-  
-  const validateStep2 = () => {
-    return idNumber.trim() !== '' && file !== null && consent;
-  };
-  
-  const goToNextStep = () => {
-    if (currentStep === 1 && validateStep1()) {
-      setCurrentStep(2);
-    } else if (currentStep === 2 && validateStep2()) {
-      setCurrentStep(3);
-    }
-  };
-  
-  const goToPreviousStep = () => {
-    if (currentStep === 2) {
-      setCurrentStep(1);
-    }
-  };
-  
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0];
-    if (selectedFile) {
-      // Check file size (max 5MB)
-      if (selectedFile.size > 5 * 1024 * 1024) {
-        alert("File size must be less than 5MB");
-        return;
-      }
-      
-      // Check file type
-      const fileType = selectedFile.type;
-      if (
-        fileType !== 'application/pdf' &&
-        fileType !== 'image/jpeg' &&
-        fileType !== 'image/png'
-      ) {
-        alert("File must be PDF, JPEG, or PNG");
-        return;
-      }
-      
-      setFile(selectedFile);
-    }
-  };
-  
-  const handleSignUp = async () => {
-    setIsSubmitting(true);
-    
-    try {
-      await signUp({
-        firstName,
-        lastName,
-        email,
-        phone,
-        password,
-        confirmPassword
-      });
-      
-      // Redirect to sign in after successful sign up
-      navigate('/sign-in');
-    } catch (error) {
-      console.error("Sign up failed:", error);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-  
   const formatIDNumber = (value: string, type: string) => {
     const digits = value.replace(/\D/g, '');
     
@@ -175,6 +103,118 @@ const SignUpPage: React.FC = () => {
     }
   };
   
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = e.target.files?.[0];
+    if (selectedFile) {
+      // Check file size (max 5MB)
+      if (selectedFile.size > 5 * 1024 * 1024) {
+        alert("File size must be less than 5MB");
+        return;
+      }
+      
+      // Check file type
+      const fileType = selectedFile.type;
+      if (
+        fileType !== 'application/pdf' &&
+        fileType !== 'image/jpeg' &&
+        fileType !== 'image/png'
+      ) {
+        alert("File must be PDF, JPEG, or PNG");
+        return;
+      }
+      
+      setFile(selectedFile);
+    }
+  };
+  
+  const validateStep1 = () => {
+    if (!firstName.trim() || !lastName.trim() || !email.includes('@')) {
+      return false;
+    }
+    return true;
+  };
+
+  const validateStep2 = () => {
+    return password.length >= 8 && password === confirmPassword;
+  };
+
+  const validateStep3 = () => {
+    return otp.length === 6;
+  };
+
+  const validateStep4 = () => {
+    return idNumber.trim() !== '' && file !== null && consent;
+  };
+  
+  const handleSendOtp = async () => {
+    if (!email) {
+      toast({
+        title: "Email Required",
+        description: "Please enter your email address first.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // In a real application, this would make an API call to send OTP
+    // For demo purposes, we'll simulate OTP sending
+    toast({
+      title: "OTP Sent",
+      description: "A verification code has been sent to your email. Use 123456 for testing.",
+    });
+  };
+
+  const goToNextStep = () => {
+    if (currentStep === 1 && validateStep1()) {
+      setCurrentStep(2);
+    } else if (currentStep === 2 && validateStep2()) {
+      handleSendOtp();
+      setCurrentStep(3);
+    } else if (currentStep === 3 && validateStep3()) {
+      if (otp === '123456') { // Demo OTP validation
+        setCurrentStep(4);
+      } else {
+        toast({
+          title: "Invalid OTP",
+          description: "Please enter the correct verification code.",
+          variant: "destructive",
+        });
+      }
+    }
+  };
+  
+  const goToPreviousStep = () => {
+    if (currentStep > 1) {
+      setCurrentStep(prev => (prev - 1) as SignUpStep);
+    }
+  };
+
+  const handleSignUp = async () => {
+    setIsSubmitting(true);
+    
+    try {
+      await signUp({
+        firstName,
+        lastName,
+        email,
+        phone,
+        password,
+        confirmPassword
+      });
+      
+      navigate('/sign-in');
+    } catch (error) {
+      console.error("Sign up failed:", error);
+      toast({
+        title: "Sign up failed",
+        description: "Please check your information and try again",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4 py-12">
       <div className="w-full max-w-md bg-white rounded-lg shadow-lg p-8 border border-blue-border">
@@ -186,30 +226,21 @@ const SignUpPage: React.FC = () => {
         
         {/* Step indicator */}
         <div className="flex justify-between mb-8">
-          <div className="flex flex-col items-center">
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${currentStep >= 1 ? 'bg-primary-blue text-white' : 'bg-gray-200 text-gray-600'}`}>
-              1
+          {[1, 2, 3, 4].map((step) => (
+            <div key={step} className="flex flex-col items-center">
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                currentStep >= step ? 'bg-primary-blue text-white' : 'bg-gray-200 text-gray-600'
+              }`}>
+                {step}
+              </div>
+              <span className="text-xs mt-1 text-gray-600">
+                {step === 1 ? "Details" :
+                 step === 2 ? "Password" :
+                 step === 3 ? "Verify" :
+                 "Documents"}
+              </span>
             </div>
-            <span className="text-xs mt-1 text-gray-600">Account</span>
-          </div>
-          <div className="flex-1 flex items-center">
-            <div className={`h-1 w-full ${currentStep >= 2 ? 'bg-primary-blue' : 'bg-gray-200'}`}></div>
-          </div>
-          <div className="flex flex-col items-center">
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${currentStep >= 2 ? 'bg-primary-blue text-white' : 'bg-gray-200 text-gray-600'}`}>
-              2
-            </div>
-            <span className="text-xs mt-1 text-gray-600">Verification</span>
-          </div>
-          <div className="flex-1 flex items-center">
-            <div className={`h-1 w-full ${currentStep >= 3 ? 'bg-primary-blue' : 'bg-gray-200'}`}></div>
-          </div>
-          <div className="flex flex-col items-center">
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${currentStep >= 3 ? 'bg-primary-blue text-white' : 'bg-gray-200 text-gray-600'}`}>
-              3
-            </div>
-            <span className="text-xs mt-1 text-gray-600">Success</span>
-          </div>
+          ))}
         </div>
         
         {/* Step 1: Personal Information */}
@@ -272,7 +303,12 @@ const SignUpPage: React.FC = () => {
                 maxLength={10}
               />
             </div>
-            
+          </div>
+        )}
+        
+        {/* Step 2: Password */}
+        {currentStep === 2 && (
+          <div className="space-y-4">
             <div className="space-y-2">
               <label htmlFor="password" className="block text-sm font-medium text-gray-700">
                 Password*
@@ -329,9 +365,48 @@ const SignUpPage: React.FC = () => {
             </div>
           </div>
         )}
+
+        {/* Step 3: OTP Verification */}
+        {currentStep === 3 && (
+          <div className="space-y-4">
+            <div className="text-center">
+              <h3 className="text-lg font-semibold mb-2">Email Verification</h3>
+              <p className="text-sm text-gray-600 mb-4">
+                Enter the 6-digit code sent to {email}
+              </p>
+            </div>
+            
+            <div className="flex justify-center">
+              <InputOTP
+                value={otp}
+                onChange={(value) => setOtp(value)}
+                maxLength={6}
+              >
+                <InputOTPGroup>
+                  <InputOTPSlot index={0} />
+                  <InputOTPSlot index={1} />
+                  <InputOTPSlot index={2} />
+                  <InputOTPSlot index={3} />
+                  <InputOTPSlot index={4} />
+                  <InputOTPSlot index={5} />
+                </InputOTPGroup>
+              </InputOTP>
+            </div>
+            
+            <div className="text-center mt-4">
+              <button
+                onClick={handleSendOtp}
+                className="text-primary-blue hover:underline text-sm"
+                type="button"
+              >
+                Resend Code
+              </button>
+            </div>
+          </div>
+        )}
         
-        {/* Step 2: ID Verification */}
-        {currentStep === 2 && (
+        {/* Step 4: ID Verification */}
+        {currentStep === 4 && (
           <div className="space-y-4">
             <div className="space-y-2">
               <label htmlFor="idType" className="block text-sm font-medium text-gray-700">
@@ -447,31 +522,10 @@ const SignUpPage: React.FC = () => {
           </div>
         )}
         
-        {/* Step 3: Success */}
-        {currentStep === 3 && (
-          <div className="text-center py-6">
-            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
-              <svg className="w-8 h-8 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
-              </svg>
-            </div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Account Created Successfully</h2>
-            <p className="text-gray-600 mb-6">
-              Your account has been created successfully. Please check your email for verification.
-            </p>
-            <Button
-              onClick={() => navigate('/sign-in')}
-              className="w-full bg-primary-blue hover:bg-blue-600"
-            >
-              Continue to Sign In
-            </Button>
-          </div>
-        )}
-        
         {/* Navigation buttons */}
-        {currentStep !== 3 && (
+        {currentStep !== 4 ? (
           <div className="mt-8 flex justify-between">
-            {currentStep === 2 ? (
+            {currentStep > 1 && (
               <Button
                 variant="outline"
                 onClick={goToPreviousStep}
@@ -479,28 +533,28 @@ const SignUpPage: React.FC = () => {
               >
                 Back
               </Button>
-            ) : (
-              <div></div> // Empty div for spacing
             )}
             
-            {currentStep === 1 ? (
-              <Button
-                onClick={goToNextStep}
-                disabled={!validateStep1()}
-                className="bg-primary-blue hover:bg-blue-600"
-              >
-                Continue
-              </Button>
-            ) : currentStep === 2 ? (
-              <Button
-                onClick={handleSignUp}
-                disabled={!validateStep2() || isSubmitting}
-                className="bg-primary-blue hover:bg-blue-600"
-              >
-                {isSubmitting ? "Creating Account..." : "Create Account"}
-              </Button>
-            ) : null}
+            <Button
+              onClick={goToNextStep}
+              disabled={
+                (currentStep === 1 && !validateStep1()) ||
+                (currentStep === 2 && !validateStep2()) ||
+                (currentStep === 3 && !validateStep3())
+              }
+              className={`${currentStep === 1 ? 'ml-auto' : ''} bg-primary-blue hover:bg-blue-600`}
+            >
+              Continue
+            </Button>
           </div>
+        ) : (
+          <Button
+            onClick={handleSignUp}
+            disabled={!validateStep4() || isSubmitting}
+            className="w-full mt-8 bg-primary-blue hover:bg-blue-600"
+          >
+            {isSubmitting ? "Creating Account..." : "Create Account"}
+          </Button>
         )}
         
         {currentStep === 1 && (
