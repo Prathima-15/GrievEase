@@ -116,6 +116,29 @@ const SignInPage: React.FC = () => {
           });
           return;
         }
+        // 📨 Send OTP via backend for email login
+        if (activeTab === 'email') {
+          const response = await fetch('http://localhost:8000/send-otp', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ email })
+          });
+
+          if (!response.ok) {
+            throw new Error("Failed to send OTP");
+          }
+
+          toast({
+            title: "OTP Sent",
+            description: "Check your email for the OTP",
+            variant: "default"
+          });
+
+          setShowOtpInput(true);
+        }
+
 
         await signIn({
           phone: activeTab === 'phone' ? phone : undefined,
@@ -124,21 +147,41 @@ const SignInPage: React.FC = () => {
         });
         setShowOtpInput(true);
       } else {
-        if (otp.length !== 6) {
-          toast({
-            title: "Invalid OTP",
-            description: "Please enter a valid 6-digit OTP",
-            variant: "destructive"
-          });
+        if (showOtpInput) {
+          if (otp.length !== 6) {
+            toast({
+              title: "Invalid OTP",
+              description: "Please enter a valid 6-digit OTP",
+              variant: "destructive"
+            });
+            return;
+          }
+        
+          if (activeTab === 'email') {
+            const response = await fetch('http://localhost:8000/verify-otp', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({ email, otp })
+            });
+        
+            if (!response.ok) {
+              throw new Error("OTP verification failed");
+            }
+        
+            toast({
+              title: "Login Successful",
+              description: "Welcome back!",
+              variant: "default"
+            });
+        
+            navigate('/');
+          }
+          // Add logic here if you want to handle phone OTP verification too
           return;
         }
-
-        await signIn({
-          phone: activeTab === 'phone' ? phone : undefined,
-          email: activeTab === 'email' ? email : undefined,
-          otp
-        });
-        navigate('/');
+        
       }
     } catch (error) {
       console.error("Sign in failed:", error);

@@ -28,10 +28,10 @@ const ADMIN_USER = {
   id: 'admin-1',
   firstName: 'Praveen',
   lastName: 'Anitha',
-  email: 'praveenanitha451@gmail.com',
+  email: 'sadhalegend@gmail.com',
   phone: '9952366108',
   role: 'admin' as const,
-  password: '@Praveen72'
+  password: 'sadha@123$'
 };
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {

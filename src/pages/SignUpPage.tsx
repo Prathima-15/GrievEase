@@ -155,23 +155,73 @@ const SignUpPage: React.FC = () => {
       });
       return;
     }
-    
-    // In a real application, this would make an API call to send OTP
-    // For demo purposes, we'll simulate OTP sending
-    toast({
-      title: "OTP Sent",
-      description: "A verification code has been sent to your email. Use 123456 for testing.",
-    });
+
+    try {
+      const response = await fetch("http://localhost:8000/send-otp", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*", // Add this header if the server supports it
+        },
+        body: JSON.stringify({ email }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to send OTP");
+      }
+
+      const data = await response.json();
+      toast({
+        title: "OTP Sent",
+        description: data.message || "A verification code has been sent to your email.",
+      });
+    } catch (error) {
+      console.error("Error sending OTP:", error);
+      toast({
+        title: "Error",
+        description: "Failed to send OTP. Please try again later.",
+        variant: "destructive",
+      });
+    }
   };
 
-  const goToNextStep = () => {
+  const verifyOtp = async (otp: string) => {
+    try {
+      console.log("Verifying OTP:", otp);
+      const response = await fetch("http://localhost:8000/verify-otp", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: email,
+          otp: otp
+        }),
+      });
+
+      const data = await response.json();
+      console.log("OTP Verification Response:", data);
+      
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to verify OTP");
+      }
+
+      return data.acknowledgment;
+    } catch (error) {
+      console.error("Error verifying OTP:", error);
+      return false;
+    }
+  };
+
+  const goToNextStep = async () => {
     if (currentStep === 1 && validateStep1()) {
       setCurrentStep(2);
     } else if (currentStep === 2 && validateStep2()) {
       handleSendOtp();
       setCurrentStep(3);
     } else if (currentStep === 3 && validateStep3()) {
-      if (otp === '123456') { // Demo OTP validation
+      const verified = await verifyOtp(otp);
+      if (verified) { 
         setCurrentStep(4);
       } else {
         toast({
