@@ -9,7 +9,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp';
 import { useToast } from '@/hooks/use-toast';
 
-type SignUpStep = 1 | 2 | 3 | 4;
+type SignUpStep = 1 | 2 | 3 | 4 | 5;
 
 const SignUpPage: React.FC = () => {
   const [currentStep, setCurrentStep] = useState<SignUpStep>(1);
@@ -27,6 +27,9 @@ const SignUpPage: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [otp, setOtp] = useState('');
+  const [state, setState] = useState('');
+  const [district, setDistrict] = useState('');
+  const [taluk, setTaluk] = useState('');
   const { toast } = useToast();
   
   const { signUp } = useAuth();
@@ -143,6 +146,10 @@ const SignUpPage: React.FC = () => {
   };
 
   const validateStep4 = () => {
+    return district.trim() !== '' && taluk.trim() !== '';
+  };
+
+  const validateStep5 = () => {
     return idNumber.trim() !== '' && file !== null && consent;
   };
   
@@ -157,7 +164,7 @@ const SignUpPage: React.FC = () => {
     }
 
     try {
-      const response = await fetch("http://localhost:8000/send-otp", {
+      const response = await fetch("http://localhost:7000/send-otp", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -188,7 +195,7 @@ const SignUpPage: React.FC = () => {
   const verifyOtp = async (otp: string) => {
     try {
       console.log("Verifying OTP:", otp);
-      const response = await fetch("http://localhost:8000/verify-otp", {
+      const response = await fetch("http://localhost:7000/verify-otp", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -213,23 +220,71 @@ const SignUpPage: React.FC = () => {
     }
   };
 
+  const checkUserExists = async () => {
+    try {
+      const formData = new FormData();
+      formData.append('email', email);
+      formData.append('phone_number', phone);
+
+      const response = await fetch("http://localhost:8000/checkuser", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await response.json();
+      console.log("User check response:", data);
+
+      if (response.ok) {
+        if (data.exists) {
+          toast({
+            title: "User Already Exists",
+            description: "This email or phone number is already registered. Please use different credentials or try signing in.",
+            variant: "destructive",
+          });
+          return false;
+        }
+        return true;
+      } else {
+        throw new Error(data.message || "Failed to check user existence");
+      }
+    } catch (error) {
+      console.error("Error checking user:", error);
+      toast({
+        title: "Error",
+        description: "Failed to verify user. Please try again.",
+        variant: "destructive",
+      });
+      return false;
+    }
+  };
+
   const goToNextStep = async () => {
-    if (currentStep === 1 && validateStep1()) {
-      setCurrentStep(2);
+    if (currentStep === 1) {
+      if (!validateStep1()) {
+        return;
+      }
+      const canProceed = await checkUserExists();
+      if (canProceed) {
+        setCurrentStep(2);
+      }
     } else if (currentStep === 2 && validateStep2()) {
       handleSendOtp();
       setCurrentStep(3);
     } else if (currentStep === 3 && validateStep3()) {
-      const verified = await verifyOtp(otp);
-      if (verified) { 
-        setCurrentStep(4);
-      } else {
+      try {
+        const verified = await verifyOtp(otp);
+        if (verified) { 
+          setCurrentStep(4);
+        }
+      } catch (error) {
         toast({
-          title: "Invalid OTP",
-          description: "Please enter the correct verification code.",
+          title: "OTP Verification Failed",
+          description: error instanceof Error ? error.message : "Please try again",
           variant: "destructive",
         });
       }
+    } else if (currentStep === 4 && validateStep4()) {
+      setCurrentStep(5);
     }
   };
   
@@ -243,28 +298,60 @@ const SignUpPage: React.FC = () => {
     setIsSubmitting(true);
     
     try {
-      await signUp({
-        firstName,
-        lastName,
-        email,
-        phone,
-        password,
-        confirmPassword
-      });
+      // Create FormData object
+      const formData = new FormData();
       
-      navigate('/sign-in');
+      // Add required user data
+      formData.append('first_name', firstName);
+      formData.append('last_name', lastName);
+      formData.append('email', email);
+      formData.append('phone_number', phone);
+      formData.append('password', password);
+      formData.append('id_type', idType);
+      formData.append('id_number', idNumber);
+      
+      // Add optional fields with defaults
+      formData.append('state', state);
+      formData.append('district', district);
+      formData.append('taluk', taluk);
+      
+      // Add file if exists
+      if (file) {
+        formData.append('id_proof', file);
+      } else {
+        throw new Error("ID proof document is required");
+      }
+
+      // Make API call
+      const response = await fetch("http://localhost:9000/users/", {
+        method: "POST",
+        body: formData,
+      });
+
+      const responseData = await response.json();
+      console.log("Server Response:", responseData);
+
+      if (response.ok && responseData.acknowledgment) {
+        toast({
+          title: "Sign up successful",
+          description: `Welcome ${firstName}! Your account has been created successfully.`,
+        });
+        navigate('/sign-in');
+      } else {
+        throw new Error(responseData.message || "Sign up failed");
+      }
     } catch (error) {
       console.error("Sign up failed:", error);
       toast({
         title: "Sign up failed",
-        description: "Please check your information and try again",
+        description: error instanceof Error ? error.message : "Please check your information and try again",
         variant: "destructive",
       });
     } finally {
       setIsSubmitting(false);
     }
   };
-
+  
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4 py-12">
       <div className="w-full max-w-md bg-white rounded-lg shadow-lg p-8 border border-blue-border">
@@ -318,7 +405,7 @@ const SignUpPage: React.FC = () => {
             ></div>
           </div>
 
-          {/* Step 3: Success */}
+          {/* Step 3: OTP */}
           <div className="flex flex-col items-center">
             <div
               className={`w-8 h-8 rounded-full flex items-center justify-center ${
@@ -327,7 +414,49 @@ const SignUpPage: React.FC = () => {
             >
               3
             </div>
-            <span className="text-xs mt-1 text-gray-600">Success</span>
+            <span className="text-xs mt-1 text-gray-600">OTP</span>
+          </div>
+
+          {/* Line between Step 3 and Step 4 */}
+          <div className="flex-1 flex items-center">
+            <div
+              className={`h-1 w-full ${
+                currentStep >= 4 ? 'bg-primary-blue' : 'bg-gray-200'
+              }`}
+            ></div>
+          </div>
+
+          {/* Step 4: Location */}
+          <div className="flex flex-col items-center">
+            <div
+              className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                currentStep >= 4 ? 'bg-primary-blue text-white' : 'bg-gray-200 text-gray-600'
+              }`}
+            >
+              4
+            </div>
+            <span className="text-xs mt-1 text-gray-600">Location</span>
+          </div>
+
+          {/* Line between Step 4 and Step 5 */}
+          <div className="flex-1 flex items-center">
+            <div
+              className={`h-1 w-full ${
+                currentStep >= 5 ? 'bg-primary-blue' : 'bg-gray-200'
+              }`}
+            ></div>
+          </div>
+
+          {/* Step 5: ID */}
+          <div className="flex flex-col items-center">
+            <div
+              className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                currentStep >= 5 ? 'bg-primary-blue text-white' : 'bg-gray-200 text-gray-600'
+              }`}
+            >
+              5
+            </div>
+            <span className="text-xs mt-1 text-gray-600">ID</span>
           </div>
         </div>
         
@@ -492,9 +621,83 @@ const SignUpPage: React.FC = () => {
             </div>
           </div>
         )}
-        
-        {/* Step 4: ID Verification */}
+
+        {/* Step 4: Location Details */}
         {currentStep === 4 && (
+          <div className="space-y-4">
+            <div className="text-center">
+              <h3 className="text-lg font-semibold mb-2">Location Details</h3>
+              <p className="text-sm text-gray-600 mb-4">
+                Please provide your location information
+              </p>
+            </div>
+            <div className="space-y-2">
+              <label htmlFor="state" className="block text-sm font-medium text-gray-700">
+                State*
+              </label>
+              <select
+                id="state"
+                value={state}
+                onChange={(e) => setState(e.target.value)}
+                className="w-full rounded-md border border-blue-border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-blue focus:border-transparent"
+              >
+                <option value="">Select State</option>
+                <option value="Tamil Nadu">Tamil Nadu</option>
+                <option value="Kerala">Kerala</option>
+                <option value="Andhra Pradesh">Andhra Pradesh</option>
+                <option value="Telangana">Telangana</option>
+                <option value="Karnataka">Karnataka</option>
+                <option value="Maharashtra">Maharashtra</option>
+                
+              </select>
+            </div>
+
+            <div className="space-y-2">
+              <label htmlFor="district" className="block text-sm font-medium text-gray-700">
+                District*
+              </label>
+              <select
+                id="district"
+                value={district}
+                onChange={(e) => setDistrict(e.target.value)}
+                className="w-full rounded-md border border-blue-border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-blue focus:border-transparent"
+              >
+                <option value="">Select District</option>
+                <option value="Salem">Salem</option>
+                <option value="Erode">Erode</option>
+                <option value="Coimbatore">Coimbatore</option>
+                <option value="Chennai">Chennai</option>
+                <option value="Tiruppur">Tiruppur</option>
+                <option value="Tiruchirappalli">Tiruchirappalli</option>
+                
+              </select>
+            </div>
+
+            <div className="space-y-2">
+              <label htmlFor="taluk" className="block text-sm font-medium text-gray-700">
+                Taluk*
+              </label>
+              <select
+                id="taluk"
+                value={taluk}
+                onChange={(e) => setTaluk(e.target.value)}
+                className="w-full rounded-md border border-blue-border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-blue focus:border-transparent"
+                disabled={!district}
+              >
+                <option value="">Select Taluk</option>
+                <option value="Kannankuruchi">Kannankuruchi</option>
+                <option value="Hasthampatti">Hasthampatti</option>
+                <option value="Kodumudi">Kodumudi</option>
+                <option value="Kovilpatti">Kovilpatti</option>
+                <option value="Sattur">Sattur</option>
+                <option value="Sivaganga">Sivaganga</option>
+              </select>
+            </div>
+          </div>
+        )}
+        
+        {/* Step 5: ID Verification */}
+        {currentStep === 5 && (
           <div className="space-y-4">
             <div className="space-y-2">
               <label htmlFor="idType" className="block text-sm font-medium text-gray-700">
@@ -611,7 +814,7 @@ const SignUpPage: React.FC = () => {
         )}
         
         {/* Navigation buttons */}
-        {currentStep !== 4 ? (
+        {currentStep !== 5 ? (
           <div className="mt-8 flex justify-between">
             {currentStep > 1 && (
               <Button
@@ -628,7 +831,8 @@ const SignUpPage: React.FC = () => {
               disabled={
                 (currentStep === 1 && !validateStep1()) ||
                 (currentStep === 2 && !validateStep2()) ||
-                (currentStep === 3 && !validateStep3())
+                (currentStep === 3 && !validateStep3()) ||
+                (currentStep === 4 && !validateStep4())
               }
               className={`${currentStep === 1 ? 'ml-auto' : ''} bg-primary-blue hover:bg-blue-600`}
             >
@@ -638,7 +842,7 @@ const SignUpPage: React.FC = () => {
         ) : (
           <Button
             onClick={handleSignUp}
-            disabled={!validateStep4() || isSubmitting}
+            disabled={!validateStep5() || isSubmitting}
             className="w-full mt-8 bg-primary-blue hover:bg-blue-600"
           >
             {isSubmitting ? "Creating Account..." : "Create Account"}
