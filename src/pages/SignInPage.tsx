@@ -87,113 +87,81 @@ const SignInPage: React.FC = () => {
 
   const handleSignIn = async () => {
     setIsSubmitting(true);
-    
+  
     try {
       if (!showOtpInput) {
+        // Step 1: Validate initial inputs (email/phone + password)
         if (!password) {
           toast({
             title: "Password required",
             description: "Please enter your password",
-            variant: "destructive"
+            variant: "destructive",
           });
           return;
         }
-
-        if (activeTab === 'phone' && phone.length < 10) {
+  
+        if (activeTab === "phone" && phone.length < 10) {
           toast({
             title: "Invalid phone number",
             description: "Please enter a valid phone number",
-            variant: "destructive"
+            variant: "destructive",
           });
           return;
         }
-
-        if (activeTab === 'email' && !email.includes('@')) {
+  
+        if (activeTab === "email" && !email.includes("@")) {
           toast({
             title: "Invalid email",
             description: "Please enter a valid email address",
-            variant: "destructive"
+            variant: "destructive",
           });
           return;
         }
-        // 📨 Send OTP via backend for email login
-        if (activeTab === 'email') {
-          const response = await fetch('http://localhost:8000/send-otp', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ email })
-          });
-
-          if (!response.ok) {
-            throw new Error("Failed to send OTP");
-          }
-
-          toast({
-            title: "OTP Sent",
-            description: "Check your email for the OTP",
-            variant: "default"
-          });
-
+  
+        // Step 2: Call signIn to verify password and trigger OTP
+        const result = await signIn({
+          phone: activeTab === "phone" ? phone : undefined,
+          email: activeTab === "email" ? email : undefined,
+          password,
+        });
+  
+        if (result.step === "otp_required") {
           setShowOtpInput(true);
         }
-
-
-        await signIn({
-          phone: activeTab === 'phone' ? phone : undefined,
-          email: activeTab === 'email' ? email : undefined,
-          password
-        });
-        setShowOtpInput(true);
       } else {
-        if (showOtpInput) {
-          if (otp.length !== 6) {
-            toast({
-              title: "Invalid OTP",
-              description: "Please enter a valid 6-digit OTP",
-              variant: "destructive"
-            });
-            return;
-          }
-        
-          if (activeTab === 'email') {
-            const response = await fetch('http://localhost:8000/verify-otp', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify({ email, otp })
-            });
-        
-            if (!response.ok) {
-              throw new Error("OTP verification failed");
-            }
-        
-            toast({
-              title: "Login Successful",
-              description: "Welcome back!",
-              variant: "default"
-            });
-        
-            navigate('/');
-          }
-          // Add logic here if you want to handle phone OTP verification too
+        // Step 3: Submit OTP
+        if (otp.length !== 6) {
+          toast({
+            title: "Invalid OTP",
+            description: "Please enter a valid 6-digit OTP",
+            variant: "destructive",
+          });
           return;
         }
-        
+  
+        const result = await signIn({
+          phone: activeTab === "phone" ? phone : undefined,
+          email: activeTab === "email" ? email : undefined,
+          otp,
+        });
+  
+        if (result.step === "signed_in") {
+          navigate("/");
+        }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Sign in failed:", error);
       toast({
         title: "Authentication failed",
-        description: "Please check your credentials and try again",
-        variant: "destructive"
+        description: error.message || "Please check your credentials and try again",
+        variant: "destructive",
       });
     } finally {
       setIsSubmitting(false);
     }
   };
+  
+  
   
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4 py-12">

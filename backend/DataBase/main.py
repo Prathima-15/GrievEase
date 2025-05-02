@@ -1,21 +1,32 @@
 import os
 import bcrypt
-from fastapi import FastAPI, HTTPException, File, UploadFile, Form, Request
+from fastapi import FastAPI, HTTPException, Form, Depends, UploadFile, File
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import create_engine, or_
 from models import Base, User
+from jose import JWTError, jwt
+from datetime import datetime, timedelta
+from pydantic import BaseModel
 
+class SignInRequest(BaseModel):
+    email: str
+    password: str
+
+
+# Setup
 UPLOAD_DIR = "uploaded_proofs"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-
 DATABASE_URL = "postgresql://postgres:1234@localhost/grievease_db"
+SECRET_KEY = "qwesiopk"  # Replace this with a more secure secret key
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 60  # Token expiry time in minutes
 
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Grievease API", description="API for Grievease application", version="1.0")
+
 
 # CORS setup for allowing cross-origin requests from your React app
 from fastapi.middleware.cors import CORSMiddleware
@@ -77,8 +88,20 @@ async def create_user(
         db.add(db_user)
         db.commit()
         db.refresh(db_user)
+        # Create the access token
+        access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        access_token = create_access_token(
+            data={"sub": db_user.email}, expires_delta=access_token_expires
+        )
+
         return JSONResponse(
-            content={"message": "Sign up successful", "user_id": db_user.user_id,"acknowledgment":True},
+            content={
+            "acknowledged": True,
+            "message": "Sign up successful",
+            "token": access_token,
+            "firstname": db_user.first_name,
+            "email": db_user.email
+            },
             status_code=200
         )
     except Exception as e:
@@ -140,5 +163,54 @@ def delete_all_users():
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error deleting users: {str(e)}")
+    finally:
+        db.close()
+
+# JWT Utility Functions
+
+def create_access_token(data: dict, expires_delta: timedelta = None):
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=15)  # Default to 15 minutes
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+def verify_password(plain_password, hashed_password):
+    return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
+
+# API Endpoints
+
+@app.post("/signin")
+async def signin(data: SignInRequest):
+    email = data.email
+    password = data.password
+    db = SessionLocal()
+    try:
+        # Fetch the user by email
+        user = db.query(User).filter(User.email == email).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Verify the password
+        if not verify_password(password, user.password):
+            raise HTTPException(status_code=401, detail="Incorrect password")
+
+        # Create the access token
+        access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        access_token = create_access_token(
+            data={"sub": user.email}, expires_delta=access_token_expires
+        )
+
+        # Return the token to the user
+        return {"access_token": access_token,
+                "first_name": user.first_name,
+                "email": user.email,
+                "token_type": "bearer"}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error during sign-in: {str(e)}")
     finally:
         db.close()

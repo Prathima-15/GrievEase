@@ -2,11 +2,9 @@ import React, { createContext, useState, useContext, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
 
 type User = {
-  id: string;
+  token: string;
   firstName: string;
-  lastName: string;
   email: string;
-  phone: string;
   role: 'user' | 'admin';
 };
 
@@ -15,19 +13,30 @@ type AuthContextType = {
   isAuthenticated: boolean;
   isAdmin: boolean;
   isLoading: boolean;
-  signIn: (credentials: { email?: string; phone?: string; password?: string; otp?: string; }) => Promise<void>;
-  signUp: (userData: Partial<User> & { password: string; confirmPassword: string; }) => Promise<void>;
+  signIn: (credentials: { email?: string; phone?: string; password?: string; otp?: string; }) => Promise<{ step: string }>;
+  signUp: (userData: { 
+    firstName: string; 
+    lastName: string; 
+    email: string; 
+    phone: string; 
+    password: string; 
+    confirmPassword: string; 
+    state: string; 
+    district: string; 
+    taluk: string; 
+    idType: string; 
+    idNumber: string; 
+    file: File; 
+  }) => Promise<void>;
   signOut: () => void;
-  verifyOtp: (otp: string) => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 // Mock admin user for demo
 const ADMIN_USER = {
-  id: 'admin-1',
+  token: 'admin-1',
   firstName: 'Praveen',
-  lastName: 'Anitha',
   email: 'sadhalegend@gmail.com',
   phone: '9952366108',
   role: 'admin' as const,
@@ -40,7 +49,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [pendingOtpVerification, setPendingOtpVerification] = useState<{
     email?: string; 
     phone?: string;
-    passwordVerified?: boolean;
+    verifyData?: any;
   } | null>(null);
   const { toast } = useToast();
 
@@ -59,135 +68,169 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const signIn = async (credentials: { email?: string; phone?: string; password?: string; otp?: string; }) => {
-    setIsLoading(true);
-    
-    try {
-      if (credentials.password && !pendingOtpVerification?.passwordVerified) {
-        // First step: Verify password
-        if ((credentials.email === ADMIN_USER.email || credentials.phone === ADMIN_USER.phone) && 
-            credentials.password === ADMIN_USER.password) {
-          // Password is correct, store pending verification
-          setPendingOtpVerification({
-            email: credentials.email,
-            phone: credentials.phone,
-            passwordVerified: true
-          });
-          
-          toast({
-            title: "Password verified",
-            description: "Please enter the OTP sent to your phone/email",
-          });
-        } else {
-          // For demo, accept any password for non-admin users
-          setPendingOtpVerification({
-            email: credentials.email,
-            phone: credentials.phone,
-            passwordVerified: true
-          });
-          
-          toast({
-            title: "Password verified",
-            description: "Please enter the OTP sent to your phone/email",
-          });
-        }
-      } else if (credentials.otp && pendingOtpVerification?.passwordVerified) {
-        // Second step: Verify OTP
-        if (credentials.otp === '123456') { // Mock OTP
-          if (pendingOtpVerification.phone === ADMIN_USER.phone || 
-              pendingOtpVerification.email === ADMIN_USER.email) {
-            setUser(ADMIN_USER);
-            localStorage.setItem('grieveEaseUser', JSON.stringify(ADMIN_USER));
-            toast({
-              title: "Signed in successfully",
-              description: "Welcome back, " + ADMIN_USER.firstName,
-            });
-          } else {
-            // Create a mock user
-            const mockUser: User = {
-              id: Math.random().toString(36).substring(2, 9),
-              firstName: 'Demo',
-              lastName: 'User',
-              email: pendingOtpVerification.email || 'demo@example.com',
-              phone: pendingOtpVerification.phone || '1234567890',
-              role: 'user',
-            };
-            
-            setUser(mockUser);
-            localStorage.setItem('grieveEaseUser', JSON.stringify(mockUser));
-            
-            toast({
-              title: "Signed in successfully",
-              description: "Welcome back, Demo User",
-            });
-          }
-          setPendingOtpVerification(null);
-        } else {
-          toast({
-            title: "Invalid OTP",
-            description: "Please enter the correct OTP",
-            variant: "destructive",
-          });
-        }
-      } else {
-        toast({
-          title: "Invalid request",
-          description: "Please enter your password first",
-          variant: "destructive",
-        });
-      }
-    } catch (error) {
-      console.error('Sign in error:', error);
-      toast({
-        title: "Authentication failed",
-        description: "Please check your credentials and try again",
-        variant: "destructive",
+    if (credentials.password && !credentials.otp) {
+      // Step 1: Verify password
+      const verifyRes = await fetch('http://localhost:8000/signin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(credentials),
       });
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  
+      const verifyData = await verifyRes.json();
+  
+      if (!verifyRes.ok) {
+        throw new Error(verifyData.detail || 'Invalid credentials');
+      }
+  
+      // Store verifyData in state for later use
+      setPendingOtpVerification({
+        email: credentials.email,
+        phone: credentials.phone,
+        verifyData: verifyData
+      });
+  
+      // Step 2: Send OTP explicitly
+      const otpRes = await fetch('http://localhost:7000/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: credentials.email,
+          phone: credentials.phone,
+        }),
+      });
+  
+      const otpData = await otpRes.json();
+  
+      if (!otpRes.ok) {
+        throw new Error(otpData.detail || 'Failed to send OTP');
+      }
+  
+      toast({
+        title: "Password verified",
+        description: "OTP has been sent to your registered email/phone.",
+      });
+  
+      return { step: 'otp_required' };
+  
+    } else if (credentials.otp) {
+      // Step 3: Verify OTP and login
+      const response = await fetch('http://localhost:7000/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(credentials),
+      });
+  
+      const data = await response.json();
+  
+      if (!response.ok) {
+        throw new Error(data.detail || 'Invalid OTP');
+      }
 
-  const signUp = async (userData: Partial<User> & { password: string; confirmPassword: string; }) => {
+      if (!pendingOtpVerification?.verifyData) {
+        throw new Error('Session expired. Please try signing in again.');
+      }
+  
+      const user = {
+        token: pendingOtpVerification.verifyData.access_token,
+        firstName: pendingOtpVerification.verifyData.first_name,
+        email: pendingOtpVerification.verifyData.email,
+        role: "user" as const
+      };
+  
+      setUser(user);
+      localStorage.setItem('grieveEaseUser', JSON.stringify(user));
+  
+      toast({
+        title: "Signed in successfully",
+        description: `Welcome back, ${user.firstName}`,
+      });
+  
+      return { step: 'signed_in' };
+    }
+  
+    throw new Error('Invalid sign-in attempt');
+  };
+  
+
+  const signUp = async (userData: { 
+    firstName: string; 
+    lastName: string; 
+    email: string; 
+    phone: string; 
+    password: string; 
+    confirmPassword: string; 
+    state: string; 
+    district: string; 
+    taluk: string; 
+    idType: string; 
+    idNumber: string; 
+    file: File; 
+  }) => {
     setIsLoading(true);
-    
+  
     try {
       if (userData.password !== userData.confirmPassword) {
         throw new Error("Passwords do not match");
       }
-      
-      // For demo, we'll create a basic user
-      const newUser: User = {
-        id: Math.random().toString(36).substring(2, 9),
-        firstName: userData.firstName || 'New',
-        lastName: userData.lastName || 'User',
-        email: userData.email || 'new@example.com',
-        phone: userData.phone || '0000000000',
-        role: 'user', // Only admins can create admin accounts
-      };
-      
-      setUser(newUser);
-      localStorage.setItem('grieveEaseUser', JSON.stringify(newUser));
-      
-      toast({
-        title: "Account created successfully",
-        description: "Welcome to Grieve Ease, " + newUser.firstName,
+  
+      const formData = new FormData();
+      formData.append("first_name", userData.firstName);
+      formData.append("last_name", userData.lastName);
+      formData.append("phone_number", userData.phone);
+      formData.append("email", userData.email);
+      formData.append("password", userData.password);
+      formData.append("state", userData.state);
+      formData.append("district", userData.district);
+      formData.append("taluk", userData.taluk);
+      formData.append("id_type", userData.idType);
+      formData.append("id_number", userData.idNumber);
+      formData.append("id_proof", userData.file);
+  
+      const response = await fetch("http://localhost:8000/users/", {
+        method: "POST",
+        body: formData,
       });
-    } catch (error) {
-      console.error('Sign up error:', error);
-      let errorMessage = "Failed to create account";
-      if (error instanceof Error) {
-        errorMessage = error.message;
+  
+      const responseData = await response.json();
+      console.log("Server Response:", responseData);
+  
+      if (!response.ok) {
+        throw new Error(responseData.message || "Sign up failed");
       }
+
+      if (!responseData.acknowledged) {
+        throw new Error(responseData.message || "Sign up failed");
+      }
+  
+      // ✅ Only runs if sign up is successful
+      toast({
+        title: "Sign up successful",
+        description: `Welcome ${userData.firstName}! Your account has been created successfully.`,
+      });
+  
+      const userObj: User = {
+        token: responseData.token,
+        firstName: responseData.firstname,
+        email: responseData.email,
+        role: "user",
+      };
+      setUser(userObj);
       
+      localStorage.setItem("grieveEaseUser", JSON.stringify(userObj));
+  
+    } catch (error) {
+      console.error("Sign up failed:", error);
       toast({
         title: "Sign up failed",
-        description: errorMessage,
+        description: error instanceof Error ? error.message : "Please check your information and try again",
         variant: "destructive",
       });
+      throw error; // Re-throw the error to be handled by the component
     } finally {
       setIsLoading(false);
     }
   };
+  
 
   const signOut = () => {
     setUser(null);
@@ -197,43 +240,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   };
 
-  const verifyOtp = async (otp: string) => {
-    if (otp === '123456') { // Mock OTP verification
-      if (pendingOtpVerification?.phone === ADMIN_USER.phone || 
-          pendingOtpVerification?.email === ADMIN_USER.email) {
-        setUser(ADMIN_USER);
-        localStorage.setItem('grieveEaseUser', JSON.stringify(ADMIN_USER));
-      } else {
-        // Create a mock user
-        const mockUser: User = {
-          id: Math.random().toString(36).substring(2, 9),
-          firstName: 'Demo',
-          lastName: 'User',
-          email: pendingOtpVerification?.email || 'demo@example.com',
-          phone: pendingOtpVerification?.phone || '1234567890',
-          role: 'user',
-        };
-        
-        setUser(mockUser);
-        localStorage.setItem('grieveEaseUser', JSON.stringify(mockUser));
-      }
-      setPendingOtpVerification(null);
-      
-      toast({
-        title: "OTP verified successfully",
-      });
-      
-      return Promise.resolve();
-    } else {
-      toast({
-        title: "Invalid OTP",
-        description: "Please enter the correct OTP",
-        variant: "destructive",
-      });
-      
-      return Promise.reject(new Error("Invalid OTP"));
-    }
-  };
+  
 
   return (
     <AuthContext.Provider
@@ -244,8 +251,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isLoading,
         signIn,
         signUp,
-        signOut,
-        verifyOtp,
+        signOut
       }}
     >
       {children}
@@ -253,7 +259,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 };
 
-export const useAuth = () => {
+const useAuth = () => {
   const context = useContext(AuthContext);
   
   if (context === undefined) {
@@ -262,3 +268,5 @@ export const useAuth = () => {
   
   return context;
 };
+
+export { useAuth };

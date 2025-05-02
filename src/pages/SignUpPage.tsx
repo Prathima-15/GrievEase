@@ -298,59 +298,50 @@ const SignUpPage: React.FC = () => {
     setIsSubmitting(true);
     
     try {
-      // Create FormData object
       const formData = new FormData();
-      
-      // Add required user data
-      formData.append('first_name', firstName);
-      formData.append('last_name', lastName);
+      formData.append('firstName', firstName);
+      formData.append('lastName', lastName);
       formData.append('email', email);
-      formData.append('phone_number', phone);
+      formData.append('phone', phone);
       formData.append('password', password);
-      formData.append('id_type', idType);
-      formData.append('id_number', idNumber);
-      
-      // Add optional fields with defaults
+      formData.append('confirmPassword', confirmPassword);
       formData.append('state', state);
       formData.append('district', district);
       formData.append('taluk', taluk);
-      
-      // Add file if exists
+      formData.append('idType', idType);
+      formData.append('idNumber', idNumber);
       if (file) {
-        formData.append('id_proof', file);
-      } else {
-        throw new Error("ID proof document is required");
+        formData.append('file', file);
       }
 
-      // Make API call
-      const response = await fetch("http://localhost:9000/users/", {
-        method: "POST",
-        body: formData,
+      await signUp({
+        firstName,
+        lastName,
+        email,
+        phone,
+        password,
+        confirmPassword,
+        state,
+        district,
+        taluk,
+        idType,
+        idNumber,
+        file,
       });
-
-      const responseData = await response.json();
-      console.log("Server Response:", responseData);
-
-      if (response.ok && responseData.acknowledgment) {
-        toast({
-          title: "Sign up successful",
-          description: `Welcome ${firstName}! Your account has been created successfully.`,
-        });
-        navigate('/sign-in');
-      } else {
-        throw new Error(responseData.message || "Sign up failed");
-      }
+      
+      navigate('/');
     } catch (error) {
       console.error("Sign up failed:", error);
       toast({
         title: "Sign up failed",
-        description: error instanceof Error ? error.message : "Please check your information and try again",
+        description: "Please check your information and try again",
         variant: "destructive",
       });
     } finally {
       setIsSubmitting(false);
     }
   };
+
   
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4 py-12">
