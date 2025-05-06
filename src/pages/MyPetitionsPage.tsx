@@ -1,6 +1,5 @@
-
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Card, CardContent, CardFooter } from '@/components/ui/card';
@@ -8,40 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Search, Plus } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-
-// Mock data for user petitions
-const MOCK_MY_PETITIONS = [
-  {
-    id: '1',
-    title: 'Fix the pothole on Main Street',
-    description: 'The large pothole on Main Street has been causing traffic issues and damage to vehicles.',
-    category: 'Infrastructure',
-    status: 'In Progress',
-    signatureCount: 156,
-    createdAt: '2025-04-15',
-    updates: 2
-  },
-  {
-    id: '2',
-    title: 'Install traffic light at dangerous intersection',
-    description: 'The intersection of Park Road and Hill Street has seen multiple accidents and needs a traffic light.',
-    category: 'Safety',
-    status: 'Pending',
-    signatureCount: 89,
-    createdAt: '2025-04-22',
-    updates: 0
-  },
-  {
-    id: '3',
-    title: 'Renovate community playground',
-    description: 'The playground equipment is outdated and poses safety risks to children.',
-    category: 'Recreation',
-    status: 'Completed',
-    signatureCount: 342,
-    createdAt: '2025-03-10',
-    updates: 5
-  }
-];
+import { useToast } from '@/hooks/use-toast';
 
 // Define status badge colors
 const STATUS_COLORS = {
@@ -61,14 +27,59 @@ const formatDate = (dateString: string) => {
   return new Date(dateString).toLocaleDateString('en-US', options);
 };
 
+interface Petition {
+  petition_id: string;
+  title: string;
+  description: string;
+  short_description: string;
+  category: string;
+  status: string;
+  signatureCount: number;
+  submitted_at: string;
+  updates: number;
+}
+
 const MyPetitionsPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  
+  const [petitions, setPetitions] = useState<Petition[]>([]);
+  const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
   const { user } = useAuth();
+  const { toast } = useToast();
+  
+  useEffect(() => {
+    const fetchPetitions = async () => {
+      try {
+        const response = await fetch('http://localhost:8000/petitions/my', {
+          headers: {
+            'Authorization': `Bearer ${user?.token}`
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch petitions');
+        }
+
+        const data = await response.json();
+        setPetitions(data);
+      } catch (error) {
+        console.error("Failed to fetch petitions", error);
+        toast({
+          title: "Error",
+          description: "Failed to load your petitions. Please try again.",
+          variant: "destructive",
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchPetitions();
+  }, [user?.token, toast]);
   
   // Filter petitions based on active tab and search query
-  const filteredPetitions = MOCK_MY_PETITIONS.filter(petition => {
+  const filteredPetitions = petitions.filter(petition => {
     // Filter by status
     if (activeTab !== 'all' && petition.status.toLowerCase() !== activeTab) {
       return false;
@@ -88,9 +99,20 @@ const MyPetitionsPage: React.FC = () => {
   });
   
   // Count petitions by status
-  const pendingCount = MOCK_MY_PETITIONS.filter(p => p.status === 'Pending').length;
-  const inProgressCount = MOCK_MY_PETITIONS.filter(p => p.status === 'In Progress').length;
-  const completedCount = MOCK_MY_PETITIONS.filter(p => p.status === 'Completed').length;
+  const pendingCount = petitions.filter(p => p.status === 'Pending').length;
+  const inProgressCount = petitions.filter(p => p.status === 'In Progress').length;
+  const completedCount = petitions.filter(p => p.status === 'Completed').length;
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-blue mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading your petitions...</p>
+        </div>
+      </div>
+    );
+  }
   
   return (
     <div className="min-h-screen bg-gray-50">
@@ -113,129 +135,135 @@ const MyPetitionsPage: React.FC = () => {
         </div>
         
         <div className="bg-white rounded-lg shadow-lg p-6">
-          <div className="md:flex-row items-center justify-between mb-4">
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-4 md:mb-0">
-              <div className='flex'>
-                <TabsList>
-                  <TabsTrigger value="all">
-                    All ({MOCK_MY_PETITIONS.length})
-                  </TabsTrigger>
-                  <TabsTrigger value="pending">
-                    Pending ({pendingCount})
-                  </TabsTrigger>
-                  <TabsTrigger value="in progress">
-                    In Progress ({inProgressCount})
-                  </TabsTrigger>
-                  <TabsTrigger value="completed">
-                    Completed ({completedCount})
-                  </TabsTrigger>
-                </TabsList>
-                <div className="relative justify-end flex-grow flex">
-                  <Search className="absolute right-5 top-3 h-4 w-4 text-gray-400" />
-                  <Input
-                    type="text"
-                    placeholder="Search your petitions..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10 w-full md:w-64"
-                  />
-                </div>
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-4 md:mb-0">
+            <div className='flex'>
+              <TabsList>
+                <TabsTrigger value="all">
+                  All ({petitions.length})
+                </TabsTrigger>
+                <TabsTrigger value="pending">
+                  Pending ({pendingCount})
+                </TabsTrigger>
+                <TabsTrigger value="in progress">
+                  In Progress ({inProgressCount})
+                </TabsTrigger>
+                <TabsTrigger value="completed">
+                  Completed ({completedCount})
+                </TabsTrigger>
+              </TabsList>
+              <div className="relative justify-end flex-grow flex">
+                <Search className="absolute right-5 top-3 h-4 w-4 text-gray-400" />
+                <Input
+                  type="text"
+                  placeholder="Search your petitions..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10 w-full md:w-64"
+                />
               </div>
+            </div>
 
-              <div className="mt-6">
-                {filteredPetitions.length > 0 ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {filteredPetitions.map(petition => (
-                      <Card key={petition.id} className="overflow-hidden border border-gray-200 h-full flex flex-col">
-                        <CardContent className="p-6 flex-grow">
-                          <div className="flex justify-between items-start mb-3">
-                            <Badge className={`${STATUS_COLORS[petition.status as keyof typeof STATUS_COLORS]} font-normal`}>
-                              {petition.status}
-                            </Badge>
-                            <span className="text-sm text-gray-500">
-                              {formatDate(petition.createdAt)}
+            {filteredPetitions.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {filteredPetitions.map(petition => (
+                  <Card key={petition.petition_id} className="overflow-hidden border border-gray-200 h-full flex flex-col">
+                    <CardContent className="p-6 flex-grow">
+                      <div className="flex justify-between items-start mb-3">
+                        <Badge className={`${STATUS_COLORS[petition.status as keyof typeof STATUS_COLORS]} font-normal`}>
+                          {petition.status}
+                        </Badge>
+                        <span className="text-sm text-gray-500">
+                          {formatDate(petition.submitted_at)}
+                        </span>
+                      </div>
+                      
+                      <h3 className="font-semibold text-lg mb-2">
+                        <Link to={`/petitions/${petition.petition_id}`} className="hover:text-primary-blue transition-colors">
+                          {petition.title}
+                        </Link>
+                      </h3>
+                      
+                      <p className="text-gray-600 text-sm mb-4 line-clamp-2">
+                        {petition.short_description}
+                      </p>
+                      
+                      <div className="flex items-center justify-between">
+                        <Badge variant="outline" className="bg-blue-50">
+                          {petition.category}
+                        </Badge>
+                        <span className="text-sm text-gray-600">
+                          <strong>{petition.signatureCount}</strong> signatures
+                        </span>
+                      </div>
+                    </CardContent>
+                    
+                    <CardFooter className="bg-gray-50 p-4 border-t">
+                      <div className="w-full flex justify-between items-center">
+                        <div className="text-sm">
+                          {petition.updates > 0 ? (
+                            <span className="text-primary-blue font-medium">
+                              {petition.updates} {petition.updates === 1 ? 'update' : 'updates'}
                             </span>
-                          </div>
-                          
-                          <h3 className="font-semibold text-lg mb-2">
-                            <Link to={`/petitions/${petition.id}`} className="hover:text-primary-blue transition-colors">
-                              {petition.title}
-                            </Link>
-                          </h3>
-                          
-                          <p className="text-gray-600 text-sm mb-4 line-clamp-2">
-                            {petition.description}
-                          </p>
-                          
-                          <div className="flex items-center justify-between">
-                            <Badge variant="outline" className="bg-blue-50">
-                              {petition.category}
-                            </Badge>
-                            <span className="text-sm text-gray-600">
-                              <strong>{petition.signatureCount}</strong> signatures
-                            </span>
-                          </div>
-                        </CardContent>
-                        
-                        <CardFooter className="bg-gray-50 p-4 border-t">
-                          <div className="w-full flex justify-between items-center">
-                            <div className="text-sm">
-                              {petition.updates > 0 ? (
-                                <span className="text-primary-blue font-medium">
-                                  {petition.updates} {petition.updates === 1 ? 'update' : 'updates'}
-                                </span>
-                              ) : (
-                                <span className="text-gray-500">No updates yet</span>
-                              )}
-                            </div>
-                            <Link to={`/petitions/${petition.id}`}>
-                              <Button 
-                                variant="outline"
-                                size="sm"
-                                className="text-primary-blue border-primary-blue hover:bg-blue-50"
-                              >
-                                View Details
-                              </Button>
-                            </Link>
-                          </div>
-                        </CardFooter>
-                      </Card>
-                    ))}
+                          ) : (
+                            <span className="text-gray-500">No updates yet</span>
+                          )}
+                        </div>
+                        <div className="flex gap-2">
+                          <Button 
+                            variant="outline"
+                            size="sm"
+                            className="text-primary-blue border-primary-blue hover:bg-blue-50"
+                            onClick={() => navigate(`/petitions/${petition.petition_id}/edit`)}
+                          >
+                            Edit
+                          </Button>
+                          <Link to={`/petitions/${petition.petition_id}`}>
+                            <Button 
+                              variant="outline"
+                              size="sm"
+                              className="text-primary-blue border-primary-blue hover:bg-blue-50"
+                            >
+                              View Details
+                            </Button>
+                          </Link>
+                        </div>
+                      </div>
+                    </CardFooter>
+                  </Card>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-12 bg-gray-50 rounded-lg">
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No petitions found</h3>
+                {searchQuery ? (
+                  <div>
+                    <p className="text-gray-600 mb-6">
+                      Try adjusting your search query.
+                    </p>
+                    <Button
+                      onClick={() => setSearchQuery('')}
+                      variant="outline"
+                      className="border-primary-blue text-primary-blue hover:bg-blue-50"
+                    >
+                      Clear Search
+                    </Button>
                   </div>
                 ) : (
-                  <div className="text-center py-12 bg-gray-50 rounded-lg">
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">No petitions found</h3>
-                    {searchQuery ? (
-                      <div>
-                        <p className="text-gray-600 mb-6">
-                          Try adjusting your search query.
-                        </p>
-                        <Button
-                          onClick={() => setSearchQuery('')}
-                          variant="outline"
-                          className="border-primary-blue text-primary-blue hover:bg-blue-50"
-                        >
-                          Clear Search
-                        </Button>
-                      </div>
-                    ) : (
-                      <div>
-                        <p className="text-gray-600 mb-6">
-                          You haven't created any petitions yet.
-                        </p>
-                        <Link to="/petitions/create">
-                          <Button className="bg-primary-blue hover:bg-blue-600">
-                            <Plus className="h-4 w-4 mr-2" />
-                            Create Your First Petition
-                          </Button>
-                        </Link>
-                      </div>
-                    )}
+                  <div>
+                    <p className="text-gray-600 mb-6">
+                      You haven't created any petitions yet.
+                    </p>
+                    <Link to="/petitions/create">
+                      <Button className="bg-primary-blue hover:bg-blue-600">
+                        <Plus className="h-4 w-4 mr-2" />
+                        Create Your First Petition
+                      </Button>
+                    </Link>
                   </div>
                 )}
               </div>
-            </Tabs>
-          </div>
+            )}
+          </Tabs>
         </div>
       </div>
     </div>

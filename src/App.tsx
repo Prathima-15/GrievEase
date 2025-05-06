@@ -1,4 +1,3 @@
-
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -19,6 +18,7 @@ import MyPetitionsPage from "./pages/MyPetitionsPage";
 import AdminDashboard from "./pages/AdminDashboard";
 import AboutPage from "./pages/AboutPage";
 import NotFound from "./pages/NotFound";
+import EditPetition from "./pages/EditPetition";
 
 const queryClient = new QueryClient();
 
@@ -46,6 +46,12 @@ const App = () => (
               <Route path="/petitions/my-petitions" element={
                 <ProtectedRoute>
                   <MyPetitionsPage />
+                </ProtectedRoute>
+              } />
+              
+              <Route path="/petitions/:id/edit" element={
+                <ProtectedRoute>
+                  <EditPetition />
                 </ProtectedRoute>
               } />
               

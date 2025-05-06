@@ -94,19 +94,53 @@ const PetitionCreatePage: React.FC = () => {
     });
   };
   
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     setIsSubmitting(true);
     
-    // Simulate API call with a timeout
-    setTimeout(() => {
-      setIsSubmitting(false);
+    try {
+      const formData = new FormData();
+      formData.append('title', title);
+      formData.append('short_description', shortDescription);
+      formData.append('description', longDescription);
+      if (location) {
+        formData.append('location', location);
+      }
+      
+      // Append all media files
+      media.forEach((file, index) => {
+        formData.append('proof_files', file);
+      });
+
+      const response = await fetch('http://localhost:8000/petition/submit', {
+        method: 'POST',
+        body: formData,
+        headers: {
+          'Authorization': `Bearer ${user?.token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to submit petition');
+      }
+
+      const data = await response.json();
+      
       setCurrentStep(4); // Go to success step
       
       toast({
         title: "Petition submitted successfully",
         description: "Your petition has been submitted for review.",
       });
-    }, 2000);
+    } catch (error) {
+      console.error('Error submitting petition:', error);
+      toast({
+        title: "Error",
+        description: "Failed to submit petition. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
   
   const validateStep1 = () => {

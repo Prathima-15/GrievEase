@@ -18,6 +18,9 @@ otp_store = {}
 root_email = os.getenv("ROOT_EMAIL")
 root_pass = os.getenv("ROOT_PASS")
 
+if not root_email or not root_pass:
+    raise RuntimeError("Environment variables ROOT_EMAIL and ROOT_PASS must be set")
+
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
