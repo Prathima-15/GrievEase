@@ -1,10 +1,10 @@
 
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
-import { Phone, Mail } from 'lucide-react';
+import { Phone, Mail, ShieldCheck } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import Logo from '@/components/Logo';
 import { Link } from 'react-router-dom';
@@ -15,7 +15,11 @@ import {
 } from "@/components/ui/input-otp";
 import { useToast } from '@/hooks/use-toast';
 
-const SignInPage: React.FC = () => {
+interface SignInPageProps {
+  isAdmin?: boolean;
+}
+
+const SignInPage: React.FC<SignInPageProps> = ({ isAdmin = false }) => {
   const [activeTab, setActiveTab] = useState<'phone' | 'email'>('phone');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
@@ -27,7 +31,11 @@ const SignInPage: React.FC = () => {
   
   const { signIn } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast } = useToast();
+  
+  // Detect if we're on the admin route
+  const isAdminRoute = isAdmin || location.pathname.includes('/admin');
   
   const handleTabChange = (value: string) => {
     setActiveTab(value as 'phone' | 'email');
@@ -123,6 +131,7 @@ const SignInPage: React.FC = () => {
           phone: activeTab === "phone" ? phone : undefined,
           email: activeTab === "email" ? email : undefined,
           password,
+          isAdmin: isAdminRoute,
         });
   
         if (result.step === "otp_required") {
@@ -143,6 +152,7 @@ const SignInPage: React.FC = () => {
           phone: activeTab === "phone" ? phone : undefined,
           email: activeTab === "email" ? email : undefined,
           otp,
+          isAdmin: isAdminRoute,
         });
   
         if (result.step === "signed_in") {

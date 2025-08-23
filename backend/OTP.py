@@ -7,6 +7,8 @@ from email.mime.text import MIMEText
 from dotenv import load_dotenv
 import os
 import time
+import certifi, ssl
+
 
 # Load environment variables from .env file
 load_dotenv()
@@ -30,6 +32,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+tls_context = ssl.create_default_context(cafile=certifi.where())
+
 class EmailRequest(BaseModel):
     email: EmailStr
 
@@ -38,36 +43,41 @@ async def send_otp(request: EmailRequest):
     otp = str(random.randint(100000, 999999))
     otp_store[request.email] = {"otp": otp, "timestamp": time.time()}
 
-    html_content = f"""
-    <html>
-    <body style="font-family: Arial, sans-serif; background-color: #f4f4f4; padding: 20px;">
-        <div style="max-width: 400px; margin: auto; background: #fff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); padding: 24px;">
-        <h2 style="color: #2a4365;">Your OTP Code</h2>
-        <p style="font-size: 16px; color: #333;">Use the following One-Time Password (OTP) to complete your sign-in:</p>
-        <div style="font-size: 32px; font-weight: bold; color: #3182ce; letter-spacing: 8px; margin: 24px 0;">{otp}</div>
-        <p style="font-size: 14px; color: #666;">This code will expire in 5 minutes. If you did not request this, please ignore this email.</p>
-        <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
-        <p style="font-size: 12px; color: #aaa;">Griev-ease Team</p>
-        </div>
-    </body>
-    </html>
-    """
-    message = MIMEText(html_content, "html")
-    message["Subject"] = "Your OTP Code"
-    message["From"] = root_email
-    message["To"] = request.email
+    # html_content = f"""
+    # <html>
+    # <body style="font-family: Arial, sans-serif; background-color: #f4f4f4; padding: 20px;">
+    #     <div style="max-width: 400px; margin: auto; background: #fff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); padding: 24px;">
+    #     <h2 style="color: #2a4365;">Your OTP Code</h2>
+    #     <p style="font-size: 16px; color: #333;">Use the following One-Time Password (OTP) to complete your sign-in:</p>
+    #     <div style="font-size: 32px; font-weight: bold; color: #3182ce; letter-spacing: 8px; margin: 24px 0;">{otp}</div>
+    #     <p style="font-size: 14px; color: #666;">This code will expire in 5 minutes. If you did not request this, please ignore this email.</p>
+    #     <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
+    #     <p style="font-size: 12px; color: #aaa;">Griev-ease Team</p>
+    #     </div>
+    # </body>
+    # </html>
+    # """
+    # message = MIMEText(html_content, "html")
+    # message["Subject"] = "Your OTP Code"
+    # message["From"] = root_email
+    # message["To"] = request.email
 
-    try:
-        await aiosmtplib.send(
-            message,
-            hostname="smtp.gmail.com",  # Correct hostname
-            port=587,
-            start_tls=True,
-            username=root_email,
-            password=root_pass,
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to send email: {str(e)}")
+    # print(otp_store)
+
+    # try:
+    #     await aiosmtplib.send(
+    #         message,
+    #         hostname="smtp.office365.com",   # Office 365 SMTP
+    #         port=587,                        # TLS port
+    #         start_tls=True,
+    #         username=root_email,             # Your Outlook/Office365 email
+    #         password=root_pass,
+    #         tls_context=tls_context ,              
+    #     )
+    # except Exception as e:
+    #     raise HTTPException(status_code=500, detail=f"Failed to send email: {str(e)}")
+
+    print(otp_store)
 
     return {"message": "OTP sent"}
 

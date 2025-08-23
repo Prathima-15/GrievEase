@@ -1,11 +1,17 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
+import Cookies from 'js-cookie';
+
 
 type User = {
   token: string;
   firstName: string;
   email: string;
   role: 'user' | 'admin';
+  userId?: number;
+  officerId?: number;
+  department?: string;
+  designation?: string;
 };
 
 type AuthContextType = {
@@ -13,7 +19,13 @@ type AuthContextType = {
   isAuthenticated: boolean;
   isAdmin: boolean;
   isLoading: boolean;
-  signIn: (credentials: { email?: string; phone?: string; password?: string; otp?: string; }) => Promise<{ step: string }>;
+  signIn: (credentials: { 
+    email?: string; 
+    phone?: string; 
+    password?: string; 
+    otp?: string; 
+    isAdmin?: boolean;
+  }) => Promise<{ step: string }>;
   signUp: (userData: { 
     firstName: string; 
     lastName: string; 
@@ -33,16 +45,6 @@ type AuthContextType = {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Mock admin user for demo
-const ADMIN_USER = {
-  token: 'admin-1',
-  firstName: 'Praveen',
-  email: 'sadhalegend@gmail.com',
-  phone: '9952366108',
-  role: 'admin' as const,
-  password: 'sadha@123$'
-};
-
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -55,22 +57,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Check for stored authentication on component mount
   useEffect(() => {
-    const storedUser = localStorage.getItem('grievEaseUser');
+    const storedUser = Cookies.get('grievEaseUser');
     if (storedUser) {
       try {
         setUser(JSON.parse(storedUser));
       } catch (error) {
         console.error('Failed to parse stored user:', error);
-        localStorage.removeItem('grievEaseUser');
+        Cookies.remove('grievEaseUser');
       }
     }
     setIsLoading(false);
   }, []);
 
-  const signIn = async (credentials: { email?: string; phone?: string; password?: string; otp?: string; }) => {
+  const signIn = async (credentials: { 
+    email?: string; 
+    phone?: string; 
+    password?: string; 
+    otp?: string; 
+    isAdmin?: boolean;
+  }) => {
     if (credentials.password && !credentials.otp) {
       // Step 1: Verify password
-      const verifyRes = await fetch('http://localhost:8000/signin', {
+      const endpoint = credentials.isAdmin 
+        ? 'http://localhost:8000/admin/signin' 
+        : 'http://localhost:8000/signin';
+      
+      const verifyRes = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(credentials),
@@ -130,15 +142,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         throw new Error('Session expired. Please try signing in again.');
       }
   
-      const user = {
+      // Create user object based on role
+      // For admin signin, we need to ensure isAdmin is set correctly
+      // We check both the endpoint used and the is_admin flag from the response
+      const isAdmin = credentials.isAdmin || !!pendingOtpVerification.verifyData.is_admin;
+      const user: User = {
         token: pendingOtpVerification.verifyData.access_token,
-        firstName: pendingOtpVerification.verifyData.first_name,
+        firstName: isAdmin 
+          ? pendingOtpVerification.verifyData.first_name || pendingOtpVerification.verifyData.name
+          : pendingOtpVerification.verifyData.first_name,
         email: pendingOtpVerification.verifyData.email,
-        role: "user" as const
+        role: isAdmin ? "admin" : "user",
       };
+
+      // Add additional fields based on role
+      if (isAdmin) {
+        user.officerId = pendingOtpVerification.verifyData.officer_id;
+        user.department = pendingOtpVerification.verifyData.department;
+        user.designation = pendingOtpVerification.verifyData.designation;
+      } else {
+        user.userId = pendingOtpVerification.verifyData.user_id;
+      }
   
       setUser(user);
-      localStorage.setItem('grieveEaseUser', JSON.stringify(user));
+      Cookies.set('grievEaseUser', JSON.stringify(user), { 
+        expires: 7, 
+        secure: window.location.protocol === 'https:',
+        sameSite: 'strict'
+      });
   
       toast({
         title: "Signed in successfully",
@@ -215,8 +246,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         role: "user",
       };
       setUser(userObj);
+      Cookies.set('grievEaseUser', JSON.stringify(userObj), { 
+        expires: 7, 
+        secure: window.location.protocol === 'https:',
+        sameSite: 'strict'
+      });
       
-      localStorage.setItem("grieveEaseUser", JSON.stringify(userObj));
   
     } catch (error) {
       console.error("Sign up failed:", error);
@@ -234,7 +269,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signOut = () => {
     setUser(null);
-    localStorage.removeItem('grieveEaseUser');
+    Cookies.remove('grievEaseUser');
     toast({
       title: "Signed out successfully",
     });

@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy import create_engine, or_
-from models import Base, User, Petition
+from models import Base, User, Petition, Officer
 from jose import JWTError, jwt
 from datetime import datetime, timedelta, timezone
 from pydantic import BaseModel
@@ -48,9 +48,17 @@ def get_current_user(token: str = Depends(oauth2_scheme)):
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id = payload.get("user_id")
-        if user_id is None:
+        officer_id = payload.get("officer_id")
+        is_admin = payload.get("is_admin", False)
+        
+        if user_id is None and officer_id is None:
             raise HTTPException(status_code=401, detail="Invalid token")
-        return user_id
+        
+        return {
+            "user_id": user_id,
+            "officer_id": officer_id,
+            "is_admin": is_admin
+        }
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid token")
     
@@ -67,6 +75,37 @@ app.add_middleware(
 @app.get("/")
 async def read_root():
     return {"message": "Welcome to the Grievease API"}
+
+
+@app.get("/users/")
+async def get_all_users():
+    db = SessionLocal()
+    users = db.query(User).all()  # This fetches all users from the User table
+    db.close()
+
+    if not users:
+        raise HTTPException(status_code=404, detail="No users found")
+
+    return users
+
+
+@app.delete("/users/")
+def delete_all_users():
+    db = SessionLocal()
+    try:
+        deleted = db.query(User).delete()
+        db.commit()
+        return {"message": f"Deleted {deleted} user(s) from the database."}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error deleting users: {str(e)}")
+    finally:
+        db.close()
+
+
+def verify_password(plain_password, hashed_password):
+    return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
+
 
 @app.post("/users/")
 async def create_user(
@@ -117,7 +156,7 @@ async def create_user(
         # Create the access token
         access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
         access_token = create_access_token(
-            data={"sub": db_user.email, "user_id": db_user.user_id},
+            data={"sub": db_user.email, "user_id": db_user.user_id, "is_admin": False},
             expires_delta=access_token_expires
         )
 
@@ -128,6 +167,69 @@ async def create_user(
             "token": access_token,
             "firstname": db_user.first_name,
             "email": db_user.email
+            },
+            status_code=200
+        )
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+    finally:
+        db.close()
+        
+@app.post("/officers/")
+async def create_officer(
+    first_name: str = Form(...),
+    last_name: str = Form(...),
+    phone_number: str = Form(...),
+    email: str = Form(...),
+    password: str = Form(...),
+    department: str = Form(...),
+    designation: str = Form(...),
+    state: str = Form(None),
+    district: str = Form(None),
+    taluk: str = Form(None),
+):
+    # Hash the password before saving it to the database
+    hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
+
+    # Store officer with hashed password
+    db = SessionLocal()
+    print(f"Creating officer with name: {first_name} {last_name}, email: {email}, department: {department}, designation: {designation}")
+    db_officer = Officer(
+        first_name=first_name,
+        last_name=last_name,
+        phone_number=phone_number,
+        email=email,
+        password=hashed_password.decode('utf-8'),
+        department=department,
+        designation=designation,
+        state= state,
+        district= district,
+        taluk=taluk,
+    )
+    try:
+        db.add(db_officer)
+        db.commit()
+        db.refresh(db_officer)
+        # Create the access token
+        access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        access_token = create_access_token(
+            data={"sub": db_officer.email, "officer_id": db_officer.officer_id, "is_admin": True},
+            expires_delta=access_token_expires
+        )
+
+        return JSONResponse(
+            content={
+            "acknowledged": True,
+            "message": "Officer registration successful",
+            "token": access_token,
+            "firstname": db_officer.first_name,
+            "email": db_officer.email,
+            "department": db_officer.department,
+            "designation": db_officer.designation,
+            "state": db_officer.state,
+            "district": db_officer.district,
+            "taluk": db_officer.taluk,
             },
             status_code=200
         )
@@ -160,42 +262,14 @@ async def check_user_exists(
             query = query.filter(or_(*conditions))
             
         user = query.first()
-
+        print(user)
         return {"exists": bool(user)}
     except Exception as e:
+        print(e)
         raise HTTPException(status_code=500, detail=f"Error checking user: {str(e)}")
     finally:
         db.close()
 
-
-@app.get("/users/")
-async def get_all_users():
-    db = SessionLocal()
-    users = db.query(User).all()  # This fetches all users from the User table
-    db.close()
-
-    if not users:
-        raise HTTPException(status_code=404, detail="No users found")
-
-    return users
-
-
-@app.delete("/users/")
-def delete_all_users():
-    db = SessionLocal()
-    try:
-        deleted = db.query(User).delete()
-        db.commit()
-        return {"message": f"Deleted {deleted} user(s) from the database."}
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"Error deleting users: {str(e)}")
-    finally:
-        db.close()
-
-
-def verify_password(plain_password, hashed_password):
-    return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
 
 # API Endpoints
 
@@ -217,7 +291,7 @@ async def signin(data: SignInRequest):
         # Create the access token
         access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
         access_token = create_access_token(
-            data={"sub": user.email, "user_id": user.user_id},
+            data={"sub": user.email, "user_id": user.user_id, "is_admin": False},
             expires_delta=access_token_expires
         )
 
@@ -232,6 +306,54 @@ async def signin(data: SignInRequest):
     finally:
         db.close()
 
+@app.post("/admin/signin")
+async def admin_signin(data: SignInRequest):
+    email = data.email
+    password = data.password
+    db = SessionLocal()
+    try:
+        # Fetch the officer by email
+        officer = db.query(Officer).filter(Officer.email == email).first()
+        if not officer:
+            raise HTTPException(status_code=404, detail="Officer not found")
+        
+        # Verify the password
+        if not verify_password(password, officer.password):
+            raise HTTPException(status_code=401, detail="Incorrect password")
+
+        # Create the access token
+        access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        access_token = create_access_token(
+            data={
+                "sub": officer.email, 
+                "officer_id": officer.officer_id, 
+                "is_admin": True,
+                "department": officer.department,
+                "designation": officer.designation
+            },
+            expires_delta=access_token_expires
+        )
+
+        # Return the token to the officer
+        return {
+            "access_token": access_token,
+            "first_name": officer.first_name,
+            "email": officer.email,
+            "department": officer.department,
+            "designation": officer.designation,
+            "token_type": "bearer"
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error during officer sign-in: {str(e)}")
+    finally:
+        db.close()
+
+
+
+
+#PETITION DATABASE ENDPOINTS
+
 @app.post("/petition/submit")
 async def submit_petition(
     title: str = Form(...),
@@ -239,8 +361,12 @@ async def submit_petition(
     description: str = Form(...),
     location: str = Form(None),
     proof_files: list[UploadFile] = File(None),
-    user_id: int = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user)
 ):
+    user_id = current_user.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=403, detail="Only regular users can submit petitions")
+        
     db = SessionLocal()
     try:
         # Create upload directory if it doesn't exist

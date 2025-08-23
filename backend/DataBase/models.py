@@ -20,13 +20,31 @@ class User(Base):
     otp_verified = Column(Boolean, default=False)
     state = Column(String(100))
     district = Column(String(100))
-    taluk = Column(String(100))  # renamed from 'maavattam'
+    taluk = Column(String(100))  
     id_type = Column(String(50))  # Aadhaar, PAN, etc.
     id_number = Column(String(50))
     id_proof_url = Column(Text)
     created_at = Column(TIMESTAMP, server_default=func.now())
-
+    
     petitions = relationship("Petition", back_populates="user")
+
+# ✅ Officer Model
+class Officer(Base):
+    __tablename__ = "officers"
+
+    officer_id = Column(Integer, primary_key=True, index=True)
+    first_name = Column(String(50), nullable=False)
+    last_name = Column(String(50), nullable=False)
+    phone_number = Column(String(15), unique=True, nullable=False)
+    email = Column(String(100), unique=True, nullable=False)
+    password = Column(String(255), nullable=False)
+    otp_verified = Column(Boolean, default=False)
+    department = Column(String(100), nullable=False)
+    designation = Column(String(100), nullable=False)
+    state = Column(String(100))
+    district = Column(String(100))
+    taluk = Column(String(100)) 
+    created_at = Column(TIMESTAMP, server_default=func.now())
 
 class Petition(Base):
     __tablename__ = "petitions"

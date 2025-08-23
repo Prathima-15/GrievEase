@@ -65,6 +65,7 @@ const App = () => (
             
             {/* Auth routes (no layout) */}
             <Route path="/sign-in" element={<SignInPage />} />
+            <Route path="/admin/signin" element={<SignInPage isAdmin={true} />} />
             <Route path="/sign-up" element={<SignUpPage />} />
             
             {/* Catch-all route */}
