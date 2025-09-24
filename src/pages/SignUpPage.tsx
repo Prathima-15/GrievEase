@@ -298,22 +298,6 @@ const SignUpPage: React.FC = () => {
     setIsSubmitting(true);
     
     try {
-      const formData = new FormData();
-      formData.append('firstName', firstName);
-      formData.append('lastName', lastName);
-      formData.append('email', email);
-      formData.append('phone', phone);
-      formData.append('password', password);
-      formData.append('confirmPassword', confirmPassword);
-      formData.append('state', state);
-      formData.append('district', district);
-      formData.append('taluk', taluk);
-      formData.append('idType', idType);
-      formData.append('idNumber', idNumber);
-      if (file) {
-        formData.append('file', file);
-      }
-
       await signUp({
         firstName,
         lastName,
@@ -329,14 +313,15 @@ const SignUpPage: React.FC = () => {
         file,
       });
       
-      navigate('/');
+      // Redirect to sign-in page after successful registration
+      toast({
+        title: "Registration Successful",
+        description: "Please sign in with your new account.",
+      });
+      navigate('/sign-in');
     } catch (error) {
       console.error("Sign up failed:", error);
-      toast({
-        title: "Sign up failed",
-        description: "Please check your information and try again",
-        variant: "destructive",
-      });
+      // Error handling is done in AuthContext, so we don't need to show toast here
     } finally {
       setIsSubmitting(false);
     }

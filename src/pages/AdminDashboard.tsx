@@ -1,6 +1,6 @@
 
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -13,94 +13,203 @@ import {
   Users,
   Settings,
   Search,
-  ArrowRight
+  ArrowRight,
+  Plus,
+  X,
+  BarChart3,
+  UserPlus
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
 
-// Mock data for dashboard
-const MOCK_STATS = {
-  pending: 24,
-  inProgress: 18,
-  completed: 42,
-  total: 84
-};
+// Types for API responses
+interface Statistics {
+  petition_counts: {
+    pending: number;
+    in_progress: number;
+    resolved: number;
+    rejected: number;
+    total: number;
+  };
+  user_counts: {
+    total_users: number;
+    total_officers: number;
+  };
+  recent_activity: {
+    recent_petitions: number;
+  };
+}
 
-const MOCK_PETITIONS = [
-  {
-    id: '1',
-    title: 'Fix the pothole on Main Street',
-    category: 'Infrastructure',
-    status: 'Pending',
-    submittedOn: '2025-04-15',
-    submittedBy: 'Arun Kumar'
-  },
-  {
-    id: '2',
-    title: 'Install streetlights in Park Colony',
-    category: 'Safety',
-    status: 'In Progress',
-    submittedOn: '2025-04-10',
-    submittedBy: 'Priya Sharma'
-  },
-  {
-    id: '3',
-    title: 'Clean the Ganges river bank',
-    category: 'Environment',
-    status: 'Completed',
-    submittedOn: '2025-03-28',
-    submittedBy: 'Rahul Singh'
-  },
-  {
-    id: '4',
-    title: 'Improve bus service frequency',
-    category: 'Transportation',
-    status: 'Pending',
-    submittedOn: '2025-04-02',
-    submittedBy: 'Deepa Patel'
-  },
-  {
-    id: '5',
-    title: 'Repair playground equipment',
-    category: 'Recreation',
-    status: 'In Progress',
-    submittedOn: '2025-04-08',
-    submittedBy: 'Mohammed Khan'
-  },
-  {
-    id: '6',
-    title: 'Request for free health camp',
-    category: 'Healthcare',
-    status: 'Completed',
-    submittedOn: '2025-04-12',
-    submittedBy: 'Dr. Vijay Reddy'
-  }
-];
+interface AdminPetition {
+  petition_id: number;
+  title: string;
+  short_description: string;
+  description: string;
+  department: string;
+  category: string;
+  urgency_level: string;
+  location?: string;
+  proof_files: string[];
+  due_date: string;
+  submitted_at: string;
+  status: string;
+  user_name: string;
+  user_email: string;
+}
 
 // Define status badge colors
 const STATUS_COLORS = {
-  'Pending': 'bg-yellow-100 text-yellow-800 border-yellow-200',
-  'In Progress': 'bg-blue-100 text-blue-800 border-blue-200',
-  'Completed': 'bg-green-100 text-green-800 border-green-200',
-  'Rejected': 'bg-red-100 text-red-800 border-red-200'
+  'open': 'bg-yellow-100 text-yellow-800 border-yellow-200',
+  'in_progress': 'bg-blue-100 text-blue-800 border-blue-200',
+  'resolved': 'bg-green-100 text-green-800 border-green-200',
+  'rejected': 'bg-red-100 text-red-800 border-red-200',
+  'escalated': 'bg-purple-100 text-purple-800 border-purple-200'
+};
+
+// Map backend status to display status
+const STATUS_DISPLAY = {
+  'open': 'Pending',
+  'in_progress': 'In Progress',
+  'resolved': 'Resolved',
+  'rejected': 'Rejected',
+  'escalated': 'Escalated'
 };
 
 const AdminDashboard: React.FC = () => {
-  const [activeTab, setActiveTab] = useState('pending');
+  const [activeTab, setActiveTab] = useState('submitted');
   const [searchQuery, setSearchQuery] = useState('');
-  const { toast } = useToast();
+  const [statistics, setStatistics] = useState<Statistics | null>(null);
+  const [petitions, setPetitions] = useState<AdminPetition[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isUpdating, setIsUpdating] = useState<number | null>(null);
   
-  const filteredPetitions = MOCK_PETITIONS.filter(petition => {
-    // Filter by status
-    if (activeTab !== 'all' && petition.status.toLowerCase().replace(' ', '-') !== activeTab) {
-      return false;
+  const { toast } = useToast();
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  // Fetch dashboard statistics
+  const fetchStatistics = async () => {
+    try {
+      const response = await fetch('http://localhost:8000/admin/statistics', {
+        headers: {
+          'Authorization': `Bearer ${user?.token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch statistics');
+      }
+
+      const data = await response.json();
+      setStatistics(data);
+    } catch (error) {
+      console.error('Error fetching statistics:', error);
+      
+      // Fallback: calculate from petitions if statistics endpoint fails
+      try {
+        const response = await fetch('http://localhost:8000/admin/petitions', {
+          headers: {
+            'Authorization': `Bearer ${user?.token}`,
+          },
+        });
+
+        if (response.ok) {
+          const petitions = await response.json();
+          
+          const stats = {
+            petition_counts: {
+              pending: petitions.filter((p: any) => p.status === 'submitted').length,
+              in_progress: petitions.filter((p: any) => p.status === 'in_progress').length,
+              resolved: petitions.filter((p: any) => p.status === 'resolved').length,
+              rejected: petitions.filter((p: any) => p.status === 'rejected').length,
+              total: petitions.length
+            },
+            user_counts: {
+              total_users: 0,
+              total_officers: 0
+            },
+            recent_activity: {
+              recent_petitions: petitions.filter((p: any) => {
+                const sevenDaysAgo = new Date();
+                sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+                return new Date(p.submitted_at) >= sevenDaysAgo;
+              }).length
+            }
+          };
+
+          setStatistics(stats);
+        }
+      } catch (fallbackError) {
+        console.error('Fallback also failed:', fallbackError);
+        toast({
+          title: "Error",
+          description: "Failed to load dashboard statistics",
+          variant: "destructive",
+        });
+      }
     }
-    
+  };
+
+  // Fetch petitions based on status
+  const fetchPetitions = async (status?: string) => {
+    try {
+      const url = new URL('http://localhost:8000/admin/petitions');
+      if (status && status !== 'all') {
+        url.searchParams.append('status', status);
+      }
+
+      const response = await fetch(url.toString(), {
+        headers: {
+          'Authorization': `Bearer ${user?.token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch petitions');
+      }
+
+      const data = await response.json();
+      // Enhanced backend returns petitions array directly for admin endpoint
+      setPetitions(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error('Error fetching petitions:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load petitions",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Load data on component mount
+  useEffect(() => {
+    const loadData = async () => {
+      setIsLoading(true);
+      await Promise.all([
+        fetchStatistics(),
+        fetchPetitions(activeTab === 'all' ? undefined : activeTab)
+      ]);
+      setIsLoading(false);
+    };
+
+    if (user?.token) {
+      loadData();
+    }
+  }, [user?.token]);
+
+  // Reload petitions when tab changes
+  useEffect(() => {
+    if (user?.token && !isLoading) {
+      fetchPetitions(activeTab === 'all' ? undefined : activeTab);
+    }
+  }, [activeTab, user?.token]);
+  
+  const filteredPetitions = petitions.filter(petition => {
     // Filter by search query
     if (
       searchQuery &&
       !petition.title.toLowerCase().includes(searchQuery.toLowerCase()) &&
       !petition.category.toLowerCase().includes(searchQuery.toLowerCase()) &&
-      !petition.submittedBy.toLowerCase().includes(searchQuery.toLowerCase())
+      !petition.user_name.toLowerCase().includes(searchQuery.toLowerCase())
     ) {
       return false;
     }
@@ -108,13 +217,45 @@ const AdminDashboard: React.FC = () => {
     return true;
   });
   
-  const handleUpdateStatus = (petitionId: string, newStatus: string) => {
-    // In a real application, we would update the petition status via an API
+  const handleUpdateStatus = async (petitionId: number, newStatus: string) => {
+    setIsUpdating(petitionId);
     
-    toast({
-      title: "Status updated",
-      description: `Petition status has been updated to ${newStatus}.`,
-    });
+    try {
+      const formData = new FormData();
+      formData.append('status', newStatus);
+
+      const response = await fetch(`http://localhost:8000/admin/petitions/${petitionId}/status`, {
+        method: 'PUT',
+        body: formData,
+        headers: {
+          'Authorization': `Bearer ${user?.token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update status');
+      }
+
+      // Refresh petitions and statistics
+      await Promise.all([
+        fetchPetitions(activeTab === 'all' ? undefined : activeTab),
+        fetchStatistics()
+      ]);
+      
+      toast({
+        title: "Status updated",
+        description: `Petition status has been updated to ${STATUS_DISPLAY[newStatus as keyof typeof STATUS_DISPLAY]}.`,
+      });
+    } catch (error) {
+      console.error('Error updating status:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update petition status",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUpdating(null);
+    }
   };
   
   return (
@@ -147,7 +288,9 @@ const AdminDashboard: React.FC = () => {
             <CardContent className="p-6 flex justify-between items-center">
               <div>
                 <p className="text-gray-600 text-sm">Pending</p>
-                <h3 className="text-3xl font-bold mt-1">{MOCK_STATS.pending}</h3>
+                <h3 className="text-3xl font-bold mt-1">
+                  {isLoading ? '...' : statistics?.petition_counts.pending || 0}
+                </h3>
               </div>
               <div className="w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center">
                 <Clock className="h-6 w-6 text-yellow-700" />
@@ -159,7 +302,9 @@ const AdminDashboard: React.FC = () => {
             <CardContent className="p-6 flex justify-between items-center">
               <div>
                 <p className="text-gray-600 text-sm">In Progress</p>
-                <h3 className="text-3xl font-bold mt-1">{MOCK_STATS.inProgress}</h3>
+                <h3 className="text-3xl font-bold mt-1">
+                  {isLoading ? '...' : statistics?.petition_counts.in_progress || 0}
+                </h3>
               </div>
               <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
                 <FileText className="h-6 w-6 text-blue-700" />
@@ -170,8 +315,10 @@ const AdminDashboard: React.FC = () => {
           <Card className="bg-green-50 border-green-200">
             <CardContent className="p-6 flex justify-between items-center">
               <div>
-                <p className="text-gray-600 text-sm">Completed</p>
-                <h3 className="text-3xl font-bold mt-1">{MOCK_STATS.completed}</h3>
+                <p className="text-gray-600 text-sm">Resolved</p>
+                <h3 className="text-3xl font-bold mt-1">
+                  {isLoading ? '...' : statistics?.petition_counts.resolved || 0}
+                </h3>
               </div>
               <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
                 <CheckCircle className="h-6 w-6 text-green-700" />
@@ -183,7 +330,9 @@ const AdminDashboard: React.FC = () => {
             <CardContent className="p-6 flex justify-between items-center">
               <div>
                 <p className="text-gray-600 text-sm">Total Petitions</p>
-                <h3 className="text-3xl font-bold mt-1">{MOCK_STATS.total}</h3>
+                <h3 className="text-3xl font-bold mt-1">
+                  {isLoading ? '...' : statistics?.petition_counts.total || 0}
+                </h3>
               </div>
               <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center">
                 <BarChart4 className="h-6 w-6 text-gray-700" />
@@ -197,6 +346,10 @@ const AdminDashboard: React.FC = () => {
           <Link to="/dashboard" className="flex items-center px-4 py-2 mr-4 bg-primary-blue text-white rounded-md">
             <FileText className="h-4 w-4 mr-2" />
             <span>Petitions</span>
+          </Link>
+          <Link to="/admin/register-officer" className="flex items-center px-4 py-2 mr-4 text-gray-700 hover:text-primary-blue">
+            <Plus className="h-4 w-4 mr-2" />
+            <span>Register Officer</span>
           </Link>
           <Link to="/dashboard/analytics" className="flex items-center px-4 py-2 mr-4 text-gray-700 hover:text-primary-blue">
             <BarChart4 className="h-4 w-4 mr-2" />
@@ -212,21 +365,84 @@ const AdminDashboard: React.FC = () => {
           </Link>
         </div>
         
+        {/* Quick Actions */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <Card className="p-6 hover:shadow-lg transition-shadow cursor-pointer border-dashed border-2 border-blue-300" 
+                onClick={() => navigate('/admin/register-officer')}>
+            <div className="flex items-center space-x-4">
+              <div className="p-3 bg-blue-100 rounded-lg">
+                <UserPlus className="h-6 w-6 text-blue-600" />
+              </div>
+              <div>
+                <h3 className="font-semibold">Register Officer</h3>
+                <p className="text-sm text-gray-600">Add new admin user</p>
+              </div>
+              <ArrowRight className="h-4 w-4 text-gray-400 ml-auto" />
+            </div>
+          </Card>
+
+          <Card className="p-6 hover:shadow-lg transition-shadow cursor-pointer border-dashed border-2 border-green-300"
+                onClick={() => navigate('/dashboard/users')}>
+            <div className="flex items-center space-x-4">
+              <div className="p-3 bg-green-100 rounded-lg">
+                <Users className="h-6 w-6 text-green-600" />
+              </div>
+              <div>
+                <h3 className="font-semibold">Manage Users</h3>
+                <p className="text-sm text-gray-600">View all users & officers</p>
+              </div>
+              <ArrowRight className="h-4 w-4 text-gray-400 ml-auto" />
+            </div>
+          </Card>
+
+          <Card className="p-6 hover:shadow-lg transition-shadow cursor-pointer border-dashed border-2 border-purple-300"
+                onClick={() => navigate('/dashboard/analytics')}>
+            <div className="flex items-center space-x-4">
+              <div className="p-3 bg-purple-100 rounded-lg">
+                <BarChart3 className="h-6 w-6 text-purple-600" />
+              </div>
+              <div>
+                <h3 className="font-semibold">Analytics</h3>
+                <p className="text-sm text-gray-600">View detailed reports</p>
+              </div>
+              <ArrowRight className="h-4 w-4 text-gray-400 ml-auto" />
+            </div>
+          </Card>
+
+          <Card className="p-6 hover:shadow-lg transition-shadow cursor-pointer border-dashed border-2 border-orange-300"
+                onClick={() => navigate('/dashboard/settings')}>
+            <div className="flex items-center space-x-4">
+              <div className="p-3 bg-orange-100 rounded-lg">
+                <Settings className="h-6 w-6 text-orange-600" />
+              </div>
+              <div>
+                <h3 className="font-semibold">Settings</h3>
+                <p className="text-sm text-gray-600">System configuration</p>
+              </div>
+              <ArrowRight className="h-4 w-4 text-gray-400 ml-auto" />
+            </div>
+          </Card>
+        </div>
+
         {/* Petition Management */}
         <div className="bg-white rounded-lg shadow-lg">
-          <Tabs defaultValue="pending" value={activeTab} onValueChange={setActiveTab}>
+          <Tabs defaultValue="submitted" value={activeTab} onValueChange={setActiveTab}>
             <div className="p-4 border-b">
               <h2 className="text-xl font-semibold mb-4">Petition Management</h2>
               <TabsList>
-                <TabsTrigger value="pending">Pending</TabsTrigger>
-                <TabsTrigger value="in-progress">In Progress</TabsTrigger>
-                <TabsTrigger value="completed">Completed</TabsTrigger>
+                <TabsTrigger value="submitted">Pending</TabsTrigger>
+                <TabsTrigger value="in_progress">In Progress</TabsTrigger>
+                <TabsTrigger value="resolved">Resolved</TabsTrigger>
                 <TabsTrigger value="all">All</TabsTrigger>
               </TabsList>
             </div>
             
             <TabsContent value={activeTab} className="p-4">
-              {filteredPetitions.length > 0 ? (
+              {isLoading ? (
+                <div className="text-center py-12">
+                  <p className="text-gray-600">Loading petitions...</p>
+                </div>
+              ) : filteredPetitions.length > 0 ? (
                 <div className="overflow-x-auto">
                   <table className="w-full border-collapse">
                     <thead>
@@ -234,19 +450,23 @@ const AdminDashboard: React.FC = () => {
                         <th className="px-4 py-3 text-gray-600 font-semibold">Petition</th>
                         <th className="px-4 py-3 text-gray-600 font-semibold">Category</th>
                         <th className="px-4 py-3 text-gray-600 font-semibold">Status</th>
+                        <th className="px-4 py-3 text-gray-600 font-semibold">Urgency</th>
                         <th className="px-4 py-3 text-gray-600 font-semibold">Submitted</th>
                         <th className="px-4 py-3 text-gray-600 font-semibold">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
                       {filteredPetitions.map((petition) => (
-                        <tr key={petition.id} className="border-b border-gray-200 hover:bg-gray-50">
+                        <tr key={petition.petition_id} className="border-b border-gray-200 hover:bg-gray-50">
                           <td className="px-4 py-4">
                             <div>
-                              <Link to={`/petitions/${petition.id}`} className="font-medium hover:text-primary-blue transition-colors">
+                              <Link 
+                                to={`/petitions/${petition.petition_id}`} 
+                                className="font-medium hover:text-primary-blue transition-colors"
+                              >
                                 {petition.title}
                               </Link>
-                              <p className="text-xs text-gray-500 mt-1">By {petition.submittedBy}</p>
+                              <p className="text-xs text-gray-500 mt-1">By {petition.user_name}</p>
                             </div>
                           </td>
                           <td className="px-4 py-4">
@@ -256,11 +476,23 @@ const AdminDashboard: React.FC = () => {
                           </td>
                           <td className="px-4 py-4">
                             <Badge className={`${STATUS_COLORS[petition.status as keyof typeof STATUS_COLORS]} font-normal`}>
-                              {petition.status}
+                              {STATUS_DISPLAY[petition.status as keyof typeof STATUS_DISPLAY]}
+                            </Badge>
+                          </td>
+                          <td className="px-4 py-4">
+                            <Badge 
+                              variant="outline" 
+                              className={
+                                petition.urgency_level === 'High' ? 'bg-red-50 text-red-700 border-red-200' :
+                                petition.urgency_level === 'Medium' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
+                                'bg-green-50 text-green-700 border-green-200'
+                              }
+                            >
+                              {petition.urgency_level}
                             </Badge>
                           </td>
                           <td className="px-4 py-4 text-gray-600">
-                            {petition.submittedOn}
+                            {new Date(petition.submitted_at).toLocaleDateString()}
                           </td>
                           <td className="px-4 py-4">
                             <div className="flex space-x-2">
@@ -270,26 +502,39 @@ const AdminDashboard: React.FC = () => {
                                 asChild
                                 className="border-primary-blue text-primary-blue"
                               >
-                                <Link to={`/petitions/${petition.id}`}>View</Link>
+                                <Link to={`/petitions/${petition.petition_id}`}>View</Link>
                               </Button>
-                              {petition.status === 'Pending' && (
+                              {petition.status === 'submitted' && (
                                 <Button
                                   variant="default"
                                   size="sm"
-                                  onClick={() => handleUpdateStatus(petition.id, 'In Progress')}
+                                  onClick={() => handleUpdateStatus(petition.petition_id, 'in_progress')}
+                                  disabled={isUpdating === petition.petition_id}
                                   className="bg-primary-blue hover:bg-blue-600"
                                 >
-                                  Accept
+                                  {isUpdating === petition.petition_id ? 'Updating...' : 'Accept'}
                                 </Button>
                               )}
-                              {petition.status === 'In Progress' && (
+                              {petition.status === 'in_progress' && (
                                 <Button
                                   variant="default"
                                   size="sm"
-                                  onClick={() => handleUpdateStatus(petition.id, 'Completed')}
+                                  onClick={() => handleUpdateStatus(petition.petition_id, 'resolved')}
+                                  disabled={isUpdating === petition.petition_id}
                                   className="bg-green-600 hover:bg-green-700"
                                 >
-                                  Complete
+                                  {isUpdating === petition.petition_id ? 'Updating...' : 'Resolve'}
+                                </Button>
+                              )}
+                              {(petition.status === 'submitted' || petition.status === 'in_progress') && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleUpdateStatus(petition.petition_id, 'rejected')}
+                                  disabled={isUpdating === petition.petition_id}
+                                  className="border-red-500 text-red-500 hover:bg-red-50"
+                                >
+                                  {isUpdating === petition.petition_id ? 'Updating...' : 'Reject'}
                                 </Button>
                               )}
                             </div>

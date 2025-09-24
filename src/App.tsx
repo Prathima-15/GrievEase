@@ -19,6 +19,10 @@ import AdminDashboard from "./pages/AdminDashboard";
 import AboutPage from "./pages/AboutPage";
 import NotFound from "./pages/NotFound";
 import EditPetition from "./pages/EditPetition";
+import OfficerRegistrationPage from "./pages/OfficerRegistrationPage";
+import UserManagementPage from "./pages/UserManagementPage";
+import AnalyticsPage from "./pages/AnalyticsPage";
+import AdminSettingsPage from "./pages/AdminSettingsPage";
 
 const queryClient = new QueryClient();
 
@@ -59,6 +63,30 @@ const App = () => (
               <Route path="/dashboard" element={
                 <ProtectedRoute requireAdmin={true}>
                   <AdminDashboard />
+                </ProtectedRoute>
+              } />
+              
+              <Route path="/admin/register-officer" element={
+                <ProtectedRoute requireAdmin={true}>
+                  <OfficerRegistrationPage />
+                </ProtectedRoute>
+              } />
+              
+              <Route path="/dashboard/users" element={
+                <ProtectedRoute requireAdmin={true}>
+                  <UserManagementPage />
+                </ProtectedRoute>
+              } />
+              
+              <Route path="/dashboard/analytics" element={
+                <ProtectedRoute requireAdmin={true}>
+                  <AnalyticsPage />
+                </ProtectedRoute>
+              } />
+              
+              <Route path="/dashboard/settings" element={
+                <ProtectedRoute requireAdmin={true}>
+                  <AdminSettingsPage />
                 </ProtectedRoute>
               } />
             </Route>

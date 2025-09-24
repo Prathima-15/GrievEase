@@ -77,15 +77,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     isAdmin?: boolean;
   }) => {
     if (credentials.password && !credentials.otp) {
-      // Step 1: Verify password
+      // Step 1: Verify password with new backend endpoints
       const endpoint = credentials.isAdmin 
-        ? 'http://localhost:8000/admin/signin' 
-        : 'http://localhost:8000/signin';
+        ? 'http://localhost:8000/auth/admin/login' 
+        : 'http://localhost:8000/auth/login';
+      
+      const formData = new FormData();
+      formData.append('email', credentials.email || '');
+      formData.append('password', credentials.password || '');
       
       const verifyRes = await fetch(endpoint, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(credentials),
+        body: formData,
       });
   
       const verifyData = await verifyRes.json();
@@ -107,7 +110,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: credentials.email,
-          phone: credentials.phone,
         }),
       });
   
@@ -119,7 +121,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   
       toast({
         title: "Password verified",
-        description: "OTP has been sent to your registered email/phone.",
+        description: "OTP has been sent to your registered email.",
       });
   
       return { step: 'otp_required' };
@@ -129,39 +131,38 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const response = await fetch('http://localhost:7000/verify-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(credentials),
+        body: JSON.stringify({
+          email: credentials.email,
+          otp: credentials.otp
+        }),
       });
   
       const data = await response.json();
   
       if (!response.ok) {
-        throw new Error(data.detail || 'Invalid OTP');
+        throw new Error(data.detail?.message || 'Invalid OTP');
       }
 
       if (!pendingOtpVerification?.verifyData) {
         throw new Error('Session expired. Please try signing in again.');
       }
   
-      // Create user object based on role
-      // For admin signin, we need to ensure isAdmin is set correctly
-      // We check both the endpoint used and the is_admin flag from the response
-      const isAdmin = credentials.isAdmin || !!pendingOtpVerification.verifyData.is_admin;
+      // Create user object based on role using the enhanced backend response
+      const userData = pendingOtpVerification.verifyData.user;
       const user: User = {
         token: pendingOtpVerification.verifyData.access_token,
-        firstName: isAdmin 
-          ? pendingOtpVerification.verifyData.first_name || pendingOtpVerification.verifyData.name
-          : pendingOtpVerification.verifyData.first_name,
-        email: pendingOtpVerification.verifyData.email,
-        role: isAdmin ? "admin" : "user",
+        firstName: userData.firstName,
+        email: userData.email,
+        role: userData.isAdmin ? "admin" : "user",
       };
 
       // Add additional fields based on role
-      if (isAdmin) {
-        user.officerId = pendingOtpVerification.verifyData.officer_id;
-        user.department = pendingOtpVerification.verifyData.department;
-        user.designation = pendingOtpVerification.verifyData.designation;
+      if (userData.isAdmin) {
+        user.officerId = userData.officer_id;
+        user.department = userData.department;
+        user.designation = userData.designation || '';
       } else {
-        user.userId = pendingOtpVerification.verifyData.user_id;
+        user.userId = userData.user_id;
       }
   
       setUser(user);
@@ -175,6 +176,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         title: "Signed in successfully",
         description: `Welcome back, ${user.firstName}`,
       });
+  
+      // Clear pending verification
+      setPendingOtpVerification(null);
   
       return { step: 'signed_in' };
     }
@@ -204,55 +208,44 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         throw new Error("Passwords do not match");
       }
   
-      const formData = new FormData();
-      formData.append("first_name", userData.firstName);
-      formData.append("last_name", userData.lastName);
-      formData.append("phone_number", userData.phone);
-      formData.append("email", userData.email);
-      formData.append("password", userData.password);
-      formData.append("state", userData.state);
-      formData.append("district", userData.district);
-      formData.append("taluk", userData.taluk);
-      formData.append("id_type", userData.idType);
-      formData.append("id_number", userData.idNumber);
-      formData.append("id_proof", userData.file);
-  
-      const response = await fetch("http://localhost:8000/users/", {
+      // Use the new enhanced backend registration endpoint
+      const requestData = {
+        first_name: userData.firstName,
+        last_name: userData.lastName,
+        phone_number: userData.phone,
+        email: userData.email,
+        password: userData.password,
+        state: userData.state,
+        district: userData.district,
+        taluk: userData.taluk,
+        id_type: userData.idType,
+        id_number: userData.idNumber
+      };
+
+      const response = await fetch("http://localhost:8000/auth/register", {
         method: "POST",
-        body: formData,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestData),
       });
   
       const responseData = await response.json();
       console.log("Server Response:", responseData);
   
       if (!response.ok) {
-        throw new Error(responseData.message || "Sign up failed");
-      }
-
-      if (!responseData.acknowledged) {
-        throw new Error(responseData.message || "Sign up failed");
+        throw new Error(responseData.detail || "Sign up failed");
       }
   
-      // ✅ Only runs if sign up is successful
+      // ✅ Registration successful - now get token through login
       toast({
-        title: "Sign up successful",
-        description: `Welcome ${userData.firstName}! Your account has been created successfully.`,
-      });
-  
-      const userObj: User = {
-        token: responseData.token,
-        firstName: responseData.firstname,
-        email: responseData.email,
-        role: "user",
-      };
-      setUser(userObj);
-      Cookies.set('grievEaseUser', JSON.stringify(userObj), { 
-        expires: 7, 
-        secure: window.location.protocol === 'https:',
-        sameSite: 'strict'
+        title: "Registration successful",
+        description: `Welcome ${userData.firstName}! Please sign in to continue.`,
       });
       
-  
+      // Note: The enhanced backend doesn't return token on registration
+      // User needs to sign in after registration
+      
     } catch (error) {
       console.error("Sign up failed:", error);
       toast({

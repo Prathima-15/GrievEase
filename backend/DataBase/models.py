@@ -40,6 +40,10 @@ class Officer(Base):
     password = Column(String(255), nullable=False)
     otp_verified = Column(Boolean, default=False)
     department = Column(String(100), nullable=False)
+
+
+
+    
     designation = Column(String(100), nullable=False)
     state = Column(String(100))
     district = Column(String(100))

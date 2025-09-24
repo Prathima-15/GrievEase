@@ -11,10 +11,22 @@ import { useToast } from '@/hooks/use-toast';
 
 // Define status badge colors
 const STATUS_COLORS = {
-  'Pending': 'bg-yellow-100 text-yellow-800 border-yellow-200',
-  'In Progress': 'bg-blue-100 text-blue-800 border-blue-200',
-  'Completed': 'bg-green-100 text-green-800 border-green-200',
-  'Rejected': 'bg-red-100 text-red-800 border-red-200'
+  'submitted': 'bg-yellow-100 text-yellow-800 border-yellow-200',
+  'under_review': 'bg-blue-100 text-blue-800 border-blue-200',
+  'in_progress': 'bg-purple-100 text-purple-800 border-purple-200',
+  'resolved': 'bg-green-100 text-green-800 border-green-200',
+  'rejected': 'bg-red-100 text-red-800 border-red-200',
+  'escalated': 'bg-orange-100 text-orange-800 border-orange-200'
+};
+
+// Status display mapping
+const STATUS_DISPLAY = {
+  'submitted': 'Submitted',
+  'under_review': 'Under Review',
+  'in_progress': 'In Progress',
+  'resolved': 'Resolved',
+  'rejected': 'Rejected',
+  'escalated': 'Escalated'
 };
 
 // Format date to readable string
@@ -49,12 +61,14 @@ const MyPetitionsPage: React.FC = () => {
   const { toast } = useToast();
   
   useEffect(() => {
+    let wsUser: WebSocket | null = null;
+    let wsGlobal: WebSocket | null = null;
+    let mounted = true;
+
     const fetchPetitions = async () => {
       try {
         const response = await fetch('http://localhost:8000/petitions/my', {
-          headers: {
-            'Authorization': `Bearer ${user?.token}`
-          }
+          headers: { 'Authorization': `Bearer ${user?.token}` }
         });
 
         if (!response.ok) {
@@ -62,7 +76,8 @@ const MyPetitionsPage: React.FC = () => {
         }
 
         const data = await response.json();
-        setPetitions(data);
+        // Enhanced backend returns { petitions: [], total_count: number, has_more: boolean }
+        if (mounted) setPetitions(data.petitions || data);
       } catch (error) {
         console.error("Failed to fetch petitions", error);
         toast({
@@ -71,12 +86,72 @@ const MyPetitionsPage: React.FC = () => {
           variant: "destructive",
         });
       } finally {
-        setLoading(false);
+        if (mounted) setLoading(false);
       }
     };
 
+    // initial load
     fetchPetitions();
-  }, [user?.token, toast]);
+
+    const uid = (user as any)?.userId ?? (user as any)?.userId ?? (user as any)?.userId;
+    // per-user WS (preferred)
+    if (uid) {
+      try {
+        wsUser = new WebSocket(`ws://localhost:8000/ws/petitions/my/${uid}`);
+        wsUser.onopen = () => console.log("User WS open", uid);
+        wsUser.onmessage = (ev) => {
+          try {
+            const payload = JSON.parse(ev.data);
+            // If server sends full petitions list, replace; otherwise react to type:update by refetch
+            if (Array.isArray(payload)) {
+              setPetitions(payload);
+            } else if (payload?.type === 'update') {
+              fetchPetitions();
+            } else if (Array.isArray((payload as any).petitions)) {
+              setPetitions((payload as any).petitions);
+            }
+          } catch (e) {
+            console.error("User WS parse error", e);
+          }
+        };
+        wsUser.onerror = (e) => console.warn("User WS error", e);
+        wsUser.onclose = () => console.log("User WS closed");
+      } catch (e) {
+        console.warn("User WS connect failed", e);
+      }
+    }
+
+    // global WS fallback
+    try {
+      wsGlobal = new WebSocket(`ws://localhost:8000/ws/petitions`);
+      wsGlobal.onopen = () => console.log("Global WS open");
+      wsGlobal.onmessage = (ev) => {
+        try {
+          const payload = JSON.parse(ev.data);
+          if (Array.isArray(payload)) {
+            setPetitions(payload);
+          } else if (payload?.type === 'update') {
+            fetchPetitions();
+          } else if (Array.isArray((payload as any).petitions)) {
+            setPetitions((payload as any).petitions);
+          }
+        } catch (e) {
+          console.error("Global WS parse error", e);
+        }
+      };
+      wsGlobal.onerror = (e) => console.warn("Global WS error", e);
+      wsGlobal.onclose = () => console.log("Global WS closed");
+    } catch (e) {
+      console.warn("Global WS connect failed", e);
+    }
+
+    return () => {
+      mounted = false;
+      try { wsUser?.close(); } catch {}
+      try { wsGlobal?.close(); } catch {}
+      wsUser = wsGlobal = null;
+    };
+  }, [user?.token, user?.userId, toast]);
   
   // Filter petitions based on active tab and search query
   const filteredPetitions = petitions.filter(petition => {
@@ -99,9 +174,9 @@ const MyPetitionsPage: React.FC = () => {
   });
   
   // Count petitions by status
-  const pendingCount = petitions.filter(p => p.status === 'Pending').length;
-  const inProgressCount = petitions.filter(p => p.status === 'In Progress').length;
-  const completedCount = petitions.filter(p => p.status === 'Completed').length;
+  const submittedCount = petitions.filter(p => p.status === 'submitted').length;
+  const inProgressCount = petitions.filter(p => p.status === 'in_progress').length;
+  const resolvedCount = petitions.filter(p => p.status === 'resolved').length;
 
   if (loading) {
     return (
@@ -141,14 +216,14 @@ const MyPetitionsPage: React.FC = () => {
                 <TabsTrigger value="all">
                   All ({petitions.length})
                 </TabsTrigger>
-                <TabsTrigger value="pending">
-                  Pending ({pendingCount})
+                <TabsTrigger value="submitted">
+                  Submitted ({submittedCount})
                 </TabsTrigger>
-                <TabsTrigger value="in progress">
+                <TabsTrigger value="in_progress">
                   In Progress ({inProgressCount})
                 </TabsTrigger>
-                <TabsTrigger value="completed">
-                  Completed ({completedCount})
+                <TabsTrigger value="resolved">
+                  Resolved ({resolvedCount})
                 </TabsTrigger>
               </TabsList>
               <div className="relative justify-end flex-grow flex">
@@ -170,7 +245,7 @@ const MyPetitionsPage: React.FC = () => {
                     <CardContent className="p-6 flex-grow">
                       <div className="flex justify-between items-start mb-3">
                         <Badge className={`${STATUS_COLORS[petition.status as keyof typeof STATUS_COLORS]} font-normal`}>
-                          {petition.status}
+                          {STATUS_DISPLAY[petition.status as keyof typeof STATUS_DISPLAY] || petition.status}
                         </Badge>
                         <span className="text-sm text-gray-500">
                           {formatDate(petition.submitted_at)}
