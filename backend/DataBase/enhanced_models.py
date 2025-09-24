@@ -123,7 +123,7 @@ class Petition(Base):
     # Add check constraints
     __table_args__ = (
         CheckConstraint("urgency_level IN ('low','medium','high','critical')", name='check_urgency_level'),
-        CheckConstraint("status IN ('submitted','in_progress','resolved','escalated','rejected')", name='check_status'),
+        CheckConstraint("status IN ('submitted','under_review','in_progress','resolved','escalated','rejected')", name='check_status'),
     )
     
     # Relationships

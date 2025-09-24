@@ -5,9 +5,10 @@ import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Share, ThumbsUp, MessageSquare, MapPin, Calendar, User, AlertTriangle, CheckCircle, Edit, Shield, Clock } from 'lucide-react';
+import { Share, ThumbsUp, MessageSquare, MapPin, Calendar, User, AlertTriangle, CheckCircle, Edit, Shield, Clock, Upload, FileImage, X } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -28,13 +29,23 @@ interface Petition {
   user_email?: string;
 }
 
+interface PetitionUpdate {
+  update_id: number;
+  update_text: string;
+  status: string;
+  updated_at: string;
+  officer_name: string;
+  proof_files: string[];
+}
+
 // Status badge colors  
 const STATUS_COLORS = {
   'submitted': 'bg-blue-100 text-blue-800 border-blue-200',
   'under_review': 'bg-yellow-100 text-yellow-800 border-yellow-200',
   'in_progress': 'bg-purple-100 text-purple-800 border-purple-200', 
   'resolved': 'bg-green-100 text-green-800 border-green-200',
-  'rejected': 'bg-red-100 text-red-800 border-red-200'
+  'rejected': 'bg-red-100 text-red-800 border-red-200',
+  'escalated': 'bg-orange-100 text-orange-800 border-orange-200'
 };
 
 // Map backend status to display status
@@ -43,7 +54,8 @@ const STATUS_DISPLAY = {
   'under_review': 'Under Review',
   'in_progress': 'In Progress', 
   'resolved': 'Resolved',
-  'rejected': 'Rejected'
+  'rejected': 'Rejected',
+  'escalated': 'Escalated'
 };
 
 // Format date to readable string
@@ -68,7 +80,37 @@ const PetitionDetailPage: React.FC = () => {
   const [newStatus, setNewStatus] = useState('');
   const [adminComment, setAdminComment] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
+  const [proofFiles, setProofFiles] = useState<File[]>([]);
+  const [updates, setUpdates] = useState<PetitionUpdate[]>([]);
+  const [loadingUpdates, setLoadingUpdates] = useState(false);
   const { toast } = useToast();
+
+  const fetchPetitionUpdates = async () => {
+    if (!id) return;
+    
+    setLoadingUpdates(true);
+    try {
+      // Use admin endpoint for admins, regular endpoint for users
+      const endpoint = isAdmin 
+        ? `http://localhost:8000/admin/petitions/${id}/updates`
+        : `http://localhost:8000/petitions/${id}/updates`;
+        
+      const response = await fetch(endpoint, {
+        headers: {
+          'Authorization': `Bearer ${user?.token}`
+        }
+      });
+
+      if (response.ok) {
+        const updatesData = await response.json();
+        setUpdates(updatesData);
+      }
+    } catch (error) {
+      console.error("Failed to fetch updates:", error);
+    } finally {
+      setLoadingUpdates(false);
+    }
+  };
 
   useEffect(() => {
     const fetchPetition = async () => {
@@ -102,6 +144,9 @@ const PetitionDetailPage: React.FC = () => {
         } else {
           setPetition(data);
         }
+        
+        // Fetch updates for all users (both admin and regular users)
+        fetchPetitionUpdates();
       } catch (error) {
         console.error("Failed to fetch petition:", error);
         setError(error instanceof Error ? error.message : "Failed to load petition");
@@ -120,6 +165,19 @@ const PetitionDetailPage: React.FC = () => {
     }
   }, [id, user?.token, isAdmin, toast]);
 
+  // Handle file selection
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const selectedFiles = Array.from(e.target.files);
+      setProofFiles(prev => [...prev, ...selectedFiles]);
+    }
+  };
+
+  // Remove selected file
+  const removeFile = (index: number) => {
+    setProofFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
   // Admin function to update petition status
   const handleUpdateStatus = async () => {
     if (!isAdmin || !petition || !newStatus) return;
@@ -133,6 +191,11 @@ const PetitionDetailPage: React.FC = () => {
         formData.append('admin_comment', adminComment.trim());
       }
 
+      // Add proof files
+      proofFiles.forEach(file => {
+        formData.append('proof_files', file);
+      });
+
       const response = await fetch(`http://localhost:8000/admin/petitions/${petition.petition_id}/status`, {
         method: 'PUT',
         body: formData,
@@ -145,13 +208,19 @@ const PetitionDetailPage: React.FC = () => {
         throw new Error('Failed to update status');
       }
 
+      const result = await response.json();
+
       // Update local state
       setPetition(prev => prev ? { ...prev, status: newStatus } : null);
       setAdminComment('');
+      setProofFiles([]);
+      
+      // Refresh updates
+      fetchPetitionUpdates();
       
       toast({
         title: "Status updated",
-        description: `Petition status has been updated to ${STATUS_DISPLAY[newStatus as keyof typeof STATUS_DISPLAY]}.`,
+        description: `Petition status has been updated to ${STATUS_DISPLAY[newStatus as keyof typeof STATUS_DISPLAY]}. ${result.files_uploaded} proof files uploaded.`,
       });
     } catch (error) {
       console.error('Error updating status:', error);
@@ -251,24 +320,68 @@ const PetitionDetailPage: React.FC = () => {
                           <SelectItem value="in_progress">In Progress</SelectItem>
                           <SelectItem value="resolved">Resolved</SelectItem>
                           <SelectItem value="rejected">Rejected</SelectItem>
+                          <SelectItem value="escalated">Escalated</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
+                    
                     <div>
                       <Label className="text-sm font-medium">Admin Comment</Label>
                       <Textarea
                         value={adminComment}
                         onChange={(e) => setAdminComment(e.target.value)}
-                        placeholder="Add a comment about this status update..."
+                        placeholder="Describe what actions you have taken or what needs to be done..."
                         className="min-h-[100px] mt-2"
                       />
                     </div>
+
+                    <div>
+                      <Label className="text-sm font-medium">Upload Proof Files</Label>
+                      <div className="mt-2">
+                        <Input
+                          type="file"
+                          multiple
+                          accept="image/*,application/pdf,.doc,.docx"
+                          onChange={handleFileChange}
+                          className="mb-2"
+                        />
+                        <p className="text-xs text-gray-500 mb-3">
+                          Upload images, documents, or other proof files to show what actions have been taken.
+                        </p>
+                        
+                        {/* Selected files preview */}
+                        {proofFiles.length > 0 && (
+                          <div className="space-y-2">
+                            <p className="text-sm font-medium">Selected Files:</p>
+                            <div className="flex flex-wrap gap-2">
+                              {proofFiles.map((file, index) => (
+                                <div key={index} className="flex items-center bg-blue-50 rounded-lg px-3 py-2 text-sm">
+                                  <FileImage className="h-4 w-4 mr-2 text-blue-600" />
+                                  <span className="max-w-32 truncate">{file.name}</span>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => removeFile(index)}
+                                    className="ml-2 h-4 w-4 p-0 hover:bg-blue-100"
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
                     <Button
                       onClick={handleUpdateStatus}
-                      disabled={!newStatus || newStatus === petition.status || isUpdating}
-                      className="bg-primary-blue hover:bg-blue-700"
+                      disabled={!newStatus || isUpdating || (!adminComment.trim() && proofFiles.length === 0 && newStatus === petition.status)}
+                      className="bg-primary-blue hover:bg-blue-700 w-full"
                     >
-                      {isUpdating ? 'Updating...' : 'Update Petition Status'}
+                      <Upload className="h-4 w-4 mr-2" />
+                      {isUpdating ? 'Updating...' : (newStatus === petition.status ? 'Add Update' : 'Update Status & Upload Proof')}
                     </Button>
                   </div>
                 </div>
@@ -361,9 +474,70 @@ const PetitionDetailPage: React.FC = () => {
               </div>
             </Card>
 
-            {/* Admin Info Panel */}
+            {/* Updates History - Visible to all users for transparency */}
+            <Card className="p-6 mb-6">
+              <h2 className="text-lg font-semibold mb-4">
+                {isAdmin ? "Updates History" : "Status Updates"}
+              </h2>
+              {loadingUpdates ? (
+                <div className="text-center py-4">
+                  <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-blue-600 mx-auto"></div>
+                  <p className="text-sm text-gray-500 mt-2">Loading updates...</p>
+                </div>
+              ) : updates.length > 0 ? (
+                <div className="space-y-4">
+                  {updates.map((update, index) => (
+                    <div key={update.update_id} className="border-l-2 border-blue-200 pl-4 pb-4">
+                      <div className="flex items-start justify-between mb-2">
+                        <Badge className="bg-blue-100 text-blue-800 text-xs">
+                          {STATUS_DISPLAY[update.status as keyof typeof STATUS_DISPLAY]}
+                        </Badge>
+                        <span className="text-xs text-gray-500">
+                          {formatDate(update.updated_at)}
+                        </span>
+                      </div>
+                      {update.update_text && (
+                        <p className="text-sm text-gray-700 mb-2">{update.update_text}</p>
+                      )}
+                      {isAdmin && (
+                        <p className="text-xs text-gray-500">By: {update.officer_name}</p>
+                      )}
+                      
+                      {/* Show proof files if any */}
+                      {update.proof_files && update.proof_files.length > 0 && (
+                        <div className="mt-2">
+                          <p className="text-xs text-gray-600 mb-1">
+                            {isAdmin ? "Attached files:" : "Evidence:"}
+                          </p>
+                          <div className="flex flex-wrap gap-1">
+                            {update.proof_files.map((file, fileIndex) => (
+                              <a
+                                key={fileIndex}
+                                href={`http://localhost:8000/uploads/${file}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center bg-gray-100 hover:bg-gray-200 rounded px-2 py-1 text-xs"
+                              >
+                                <FileImage className="h-3 w-3 mr-1" />
+                                {file.length > 15 ? `${file.substring(0, 15)}...` : file}
+                              </a>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500 text-center py-4">
+                  {isAdmin ? "No updates recorded yet." : "No status updates available yet."}
+                </p>
+              )}
+            </Card>
+
+            {/* Admin Info Panel - Admin only */}
             {isAdmin && (
-              <Card className="p-6">
+              <Card className="p-6 mb-6">
                 <div className="flex items-center mb-4">
                   <Shield className="h-5 w-5 mr-2 text-blue-600" />
                   <h2 className="text-lg font-semibold">Admin View</h2>

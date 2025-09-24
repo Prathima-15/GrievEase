@@ -11,7 +11,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy import create_engine, or_, and_
-from enhanced_models import Base, User, Officer, Petition, Department, PetitionEvidence, PetitionUpdate, Escalation, Notification, Category
+from enhanced_models import Base, User, Officer, Petition, Department, PetitionEvidence, Escalation, Notification, Category
+from enhanced_models import PetitionUpdate as PetitionUpdateModel
 from ai_classification import get_ai_classifier
 from jose import JWTError, jwt
 from datetime import datetime, timedelta, timezone
@@ -154,7 +155,7 @@ class PetitionCreate(BaseModel):
     is_public: bool = True
     # Note: department and category will be AI-classified
 
-class PetitionUpdate(BaseModel):
+class PetitionUpdateRequest(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
     status: Optional[str] = None
@@ -627,7 +628,7 @@ async def get_analytics(
         
         # Get recent petition updates (with error handling)
         try:
-            recent_updates = db.query(PetitionUpdate).order_by(PetitionUpdate.updated_at.desc()).limit(5).all()
+            recent_updates = db.query(PetitionUpdateModel).order_by(PetitionUpdateModel.updated_at.desc()).limit(5).all()
             for update in recent_updates:
                 recent_activity.append({
                     "type": "petition_updated",
@@ -965,6 +966,71 @@ def get_petition_details(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch petition: {str(e)}")
 
+@app.get("/petitions/{petition_id}/updates")
+def get_petition_updates_public(
+    petition_id: int,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get petition updates for regular users (public transparency)"""
+    try:
+        # First check if user has permission to view this petition
+        petition = db.query(Petition).filter(Petition.petition_id == petition_id).first()
+        
+        if not petition:
+            raise HTTPException(status_code=404, detail="Petition not found")
+        
+        user_id = current_user.get("user_id")
+        officer_id = current_user.get("officer_id")
+        
+        # Check permissions - users can see their own petitions or public ones, officers can see all
+        if not (petition.user_id == user_id or officer_id or petition.is_public):
+            raise HTTPException(status_code=403, detail="Access denied")
+        
+        # Get all updates for this petition
+        updates = db.query(PetitionUpdateModel).filter(
+            PetitionUpdateModel.petition_id == petition_id
+        ).order_by(PetitionUpdateModel.updated_at.desc()).all()
+        
+        # Format response for public view
+        result = []
+        for update in updates:
+            # Parse proof files if stored as JSON string
+            proof_files = []
+            if update.proof_url:
+                try:
+                    import json
+                    if update.proof_url.startswith('['):
+                        proof_files = json.loads(update.proof_url)
+                    else:
+                        proof_files = [update.proof_url] if update.proof_url else []
+                except:
+                    proof_files = [update.proof_url] if update.proof_url else []
+            
+            # Get officer name for admin view only
+            officer_name = None
+            if officer_id and update.officer_id:
+                officer = db.query(Officer).filter(Officer.officer_id == update.officer_id).first()
+                if officer:
+                    officer_name = f"{officer.first_name} {officer.last_name}"
+            
+            result.append({
+                "update_id": update.update_id,
+                "update_text": update.update_text,
+                "status": update.status,
+                "updated_at": update.updated_at,
+                "proof_files": proof_files,
+                "officer_name": officer_name if officer_id else None  # Only show to admins
+            })
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error fetching petition updates: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error fetching updates: {str(e)}")
+
 @app.get("/categories")
 def get_categories(
     department_id: int = Query(default=None),
@@ -1101,10 +1167,11 @@ def update_petition_status(
     petition_id: int,
     status: str = Form(...),
     admin_comment: str = Form(default=None),
+    proof_files: List[UploadFile] = File(default=[]),
     current_admin: dict = Depends(get_current_admin_user),
     db: Session = Depends(get_db)
 ):
-    """Update petition status (admin only)"""
+    """Update petition status with admin comments and proof files"""
     try:
         petition = db.query(Petition).filter(Petition.petition_id == petition_id).first()
         if not petition:
@@ -1116,32 +1183,133 @@ def update_petition_status(
             raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {valid_statuses}")
         
         old_status = petition.status
+        
+        # Handle proof file uploads
+        uploaded_files = []
+        if proof_files and proof_files[0].filename:  # Check if files were actually uploaded
+            print(f"Processing {len(proof_files)} admin proof files")
+            for file in proof_files:
+                if file.filename:
+                    try:
+                        # Generate unique filename for admin updates
+                        import time
+                        timestamp = str(time.time()).replace('.', '_')
+                        # Sanitize filename
+                        safe_filename = "".join(c for c in file.filename if c.isalnum() or c in "._-")
+                        filename = f"admin_{current_admin['officer_id']}_{timestamp}_{safe_filename}"
+                        file_path = os.path.join(UPLOAD_DIR, filename)
+                        
+                        # Save file
+                        with open(file_path, "wb") as buffer:
+                            content = file.file.read()
+                            buffer.write(content)
+                        
+                        uploaded_files.append(filename)
+                        print(f"Admin proof file saved: {filename}")
+                    except Exception as e:
+                        print(f"Error saving admin proof file {file.filename}: {str(e)}")
+                        # Continue with other files
+                        continue
+        
+        # Update petition status
         petition.status = status
         
-        # Create status update record
+        # Create detailed status update record
+        update_text_parts = [f"Status changed from '{old_status}' to '{status}'"]
+        
+        if admin_comment:
+            update_text_parts.append(f"Admin comment: {admin_comment}")
+        
+        if uploaded_files:
+            update_text_parts.append(f"Proof files uploaded: {', '.join(uploaded_files)}")
+        
+        update_text = ". ".join(update_text_parts)
+        
+        # Store proof files as JSON string for backward compatibility
+        proof_url = None
+        if uploaded_files:
+            import json
+            proof_url = json.dumps(uploaded_files)
+        
         try:
-            if admin_comment:
-                update_record = PetitionUpdate(
-                    petition_id=petition_id,
-                    officer_id=current_admin["officer_id"],
-                    update_text=f"Status changed from {old_status} to {status}. Comment: {admin_comment}",
-                    status=status
-                )
-                db.add(update_record)
+            update_record = PetitionUpdateModel(
+                petition_id=petition_id,
+                officer_id=current_admin["officer_id"],
+                update_text=update_text,
+                proof_url=proof_url,
+                status=status
+            )
+            db.add(update_record)
         except Exception as e:
-            # If PetitionUpdate creation fails, continue anyway
             print(f"Failed to create update record: {e}")
+            # Continue anyway
             pass
         
         db.commit()
         db.refresh(petition)
         
-        return {"message": "Status updated successfully", "petition_id": petition_id, "new_status": status}
+        return {
+            "message": "Status updated successfully", 
+            "petition_id": petition_id, 
+            "new_status": status,
+            "files_uploaded": len(uploaded_files),
+            "update_text": update_text
+        }
         
     except Exception as e:
         db.rollback()
         print(f"Error updating petition status: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to update status: {str(e)}")
+
+@app.get("/admin/petitions/{petition_id}/updates")
+def get_petition_updates(
+    petition_id: int,
+    current_admin: dict = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """Get all updates for a petition (admin only)"""
+    try:
+        petition = db.query(Petition).filter(Petition.petition_id == petition_id).first()
+        if not petition:
+            raise HTTPException(status_code=404, detail="Petition not found")
+        
+        # Get all updates for this petition
+        updates = db.query(PetitionUpdateModel).filter(
+            PetitionUpdateModel.petition_id == petition_id
+        ).order_by(PetitionUpdateModel.updated_at.desc()).all()
+        
+        result = []
+        for update in updates:
+            # Get officer info
+            officer = db.query(Officer).filter(Officer.officer_id == update.officer_id).first()
+            officer_name = f"{officer.first_name} {officer.last_name}" if officer else "Unknown Officer"
+            
+            # Parse proof files
+            proof_files = []
+            if update.proof_url:
+                try:
+                    import json
+                    proof_files = json.loads(update.proof_url)
+                    if isinstance(proof_files, str):
+                        proof_files = [proof_files]
+                except:
+                    proof_files = [update.proof_url] if update.proof_url else []
+            
+            update_data = {
+                "update_id": update.update_id,
+                "update_text": update.update_text,
+                "status": update.status,
+                "updated_at": update.updated_at.isoformat(),
+                "officer_name": officer_name,
+                "proof_files": proof_files
+            }
+            result.append(update_data)
+        
+        return result
+        
+    except Exception as e:
+        print(f"Error fetching petition updates: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch updates: {str(e)}")
 
 @app.get("/admin/statistics")
 def get_admin_statistics(
