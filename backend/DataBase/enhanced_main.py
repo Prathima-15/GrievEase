@@ -15,7 +15,6 @@ from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy import create_engine, or_, and_
 from enhanced_models import Base, User, Officer, Petition, Department, PetitionEvidence, Escalation, Notification, Category
 from enhanced_models import PetitionUpdate as PetitionUpdateModel
-# Removed: from ai_classification import get_ai_classifier (not used - we call external API)
 from jose import JWTError, jwt
 from datetime import datetime, timedelta, timezone
 from pydantic import BaseModel
@@ -32,12 +31,41 @@ SECRET_KEY = "secret"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
+
 # Gladia API configuration for speech-to-text
 GLADIA_API_KEY = "c12a192d-9353-42d3-b24c-cc69f3c27aa5"
 GLADIA_API_URL = "https://api.gladia.io"
 
 # AI Classification API configuration
 AI_CLASSIFICATION_URL = "http://localhost:8002/predict"
+
+# SMTP Email configuration (update with your SMTP server details)
+SMTP_HOST = "smtp.gmail.com"
+SMTP_PORT = 587
+SMTP_USER = "sadhamlbb@gmail.com"  # Replace with your email
+SMTP_PASSWORD = '''fizl znzi dget kros'''  # Use app password or real password
+EMAIL_FROM = "GrievEase <sadhamlbb@gmail.com>"
+
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.utils import formataddr
+
+def send_email(to_email: str, subject: str, body: str):
+    try:
+        msg = MIMEMultipart()
+        msg['From'] = EMAIL_FROM
+        msg['To'] = to_email
+        msg['Subject'] = subject
+        msg.attach(MIMEText(body, 'html'))
+
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+            server.starttls()
+            server.login(SMTP_USER, SMTP_PASSWORD)
+            server.sendmail(EMAIL_FROM, to_email, msg.as_string())
+        print(f"📧 Email sent to {to_email}")
+    except Exception as e:
+        print(f"❌ Failed to send email to {to_email}: {e}")
 
 # Create database engine and session
 engine = create_engine(DATABASE_URL)
@@ -371,6 +399,56 @@ def read_root():
 @app.get("/health")
 def health_check():
     return {"status": "healthy", "timestamp": datetime.utcnow()}
+
+# Public alias for browsing petitions to avoid dynamic route conflicts
+@app.get("/public/petitions")
+def browse_petitions_public_alias(
+    db: Session = Depends(get_db),
+    search: Optional[str] = Query(default=None),
+    status: Optional[str] = Query(default=None),
+    category: Optional[str] = Query(default=None),
+    department: Optional[str] = Query(default=None),
+    sort_by: str = Query(default="newest"),
+    skip: int = Query(default=0),
+    limit: int = Query(default=100)
+):
+    """Alias endpoint for public petition browsing.
+    Delegates to the main /petitions/browse handler, but with a static path
+    that won't collide with /petitions/{petition_id}.
+    """
+    return browse_petitions(
+        db=db,
+        search=search,
+        status=status,
+        category=category,
+        department=department,
+        sort_by=sort_by,
+        skip=skip,
+        limit=limit,
+    )
+
+# Short alias as well for convenience/dev testing
+@app.get("/browse")
+def browse_petitions_short_alias(
+    db: Session = Depends(get_db),
+    search: Optional[str] = Query(default=None),
+    status: Optional[str] = Query(default=None),
+    category: Optional[str] = Query(default=None),
+    department: Optional[str] = Query(default=None),
+    sort_by: str = Query(default="newest"),
+    skip: int = Query(default=0),
+    limit: int = Query(default=100)
+):
+    return browse_petitions(
+        db=db,
+        search=search,
+        status=status,
+        category=category,
+        department=department,
+        sort_by=sort_by,
+        skip=skip,
+        limit=limit,
+    )
 
 # User registration
 @app.post("/auth/register")
@@ -953,6 +1031,19 @@ async def create_petition(
         
         print(f"Petition created successfully with ID: {db_petition.petition_id}")
         
+        # Notify WebSocket clients about the new petition
+        try:
+            print(f"🔔 Notifying WebSocket clients for user {user_id} after petition creation")
+            user_petitions = db.query(Petition).filter(Petition.user_id == user_id).all()
+            print(f"📊 Found {len(user_petitions)} petitions to send via WebSocket")
+            await notify_user_petitions(user_id, user_petitions)
+            print(f"✅ WebSocket notification sent successfully")
+        except Exception as ws_error:
+            print(f"⚠️ WebSocket notification error (non-fatal): {ws_error}")
+            import traceback
+            traceback.print_exc()
+            # Don't fail the request if WebSocket notification fails
+        
         # Return petition with classification details
         return {
             "message": "Petition created successfully",
@@ -1151,6 +1242,118 @@ def get_petition_updates_public(
         print(f"Error fetching petition updates: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error fetching updates: {str(e)}")
 
+
+@app.put("/petitions/{petition_id}/edit")
+async def edit_petition(
+    petition_id: int,
+    title: str = Form(...),
+    short_description: str = Form(...),
+    description: str = Form(...),
+    location: str = Form(None),
+    proof_files: List[UploadFile] = File(default=[]),
+    existing_files: Optional[str] = Form(None),
+    removed_files: Optional[str] = Form(None),
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Edit an existing petition (user-owned). Supports adding/removing proof files."""
+    try:
+        if current_user.get("type") != "user":
+            raise HTTPException(status_code=403, detail="Only users can edit their petitions")
+
+        user_id = current_user.get("user_id")
+        petition = db.query(Petition).filter(Petition.petition_id == petition_id).first()
+        if not petition:
+            raise HTTPException(status_code=404, detail="Petition not found")
+
+        if petition.user_id != user_id:
+            raise HTTPException(status_code=403, detail="Not authorized to edit this petition")
+
+        # Ensure upload directory exists
+        os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+        # Handle new uploaded files
+        new_files: List[str] = []
+        if proof_files and proof_files[0].filename:
+            for file in proof_files:
+                if not file.filename:
+                    continue
+                try:
+                    timestamp = str(datetime.utcnow().timestamp()).replace('.', '_')
+                    safe_name = "".join(c for c in file.filename if c.isalnum() or c in '._-')
+                    filename = f"{user_id}_{timestamp}_{safe_name}"
+                    filepath = os.path.join(UPLOAD_DIR, filename)
+                    # read and write
+                    content = await file.read()
+                    with open(filepath, "wb") as f:
+                        f.write(content)
+                    new_files.append(filename)
+                except Exception as e:
+                    print(f"Error saving file {getattr(file, 'filename', '<unknown>')}: {e}")
+                    continue
+
+        # Parse existing_files and removed_files (they may be JSON arrays or comma separated strings)
+        import json
+        current_files: List[str] = []
+        if existing_files:
+            try:
+                current_files = json.loads(existing_files) if (existing_files.strip().startswith('[')) else [f.strip() for f in existing_files.split(',') if f.strip()]
+            except Exception:
+                current_files = [f.strip() for f in existing_files.split(',') if f.strip()]
+
+        removed_list: List[str] = []
+        if removed_files:
+            try:
+                removed_list = json.loads(removed_files) if (removed_files.strip().startswith('[')) else [f.strip() for f in removed_files.split(',') if f.strip()]
+            except Exception:
+                removed_list = [f.strip() for f in removed_files.split(',') if f.strip()]
+
+        # Remove files requested
+        for rf in removed_list:
+            try:
+                path = os.path.join(UPLOAD_DIR, rf)
+                if os.path.exists(path):
+                    os.remove(path)
+                if rf in current_files:
+                    current_files.remove(rf)
+            except Exception as e:
+                print(f"Failed to remove file {rf}: {e}")
+
+        # Update petition fields
+        petition.title = title.strip()
+        petition.short_description = short_description.strip() if short_description else None
+        petition.description = description.strip()
+        petition.location = location.strip() if location else None
+
+        # Combine existing and new files
+        petition.proof_files = (current_files or []) + new_files if (current_files or new_files) else None
+
+        db.commit()
+        db.refresh(petition)
+
+        # Notify user's websocket connections (non-blocking)
+        try:
+            print(f"🔔 Notifying WebSocket clients for user {user_id} after petition edit")
+            user_petitions = db.query(Petition).filter(Petition.user_id == user_id).order_by(Petition.submitted_at.desc()).all()
+            print(f"📊 Found {len(user_petitions)} petitions to send via WebSocket")
+            # Await the notification directly (no create_task needed in request handler)
+            await notify_user_petitions(user_id, user_petitions)
+            print(f"✅ WebSocket notification sent successfully")
+        except Exception as e:
+            print(f"⚠️ WebSocket notification error (non-fatal): {e}")
+            import traceback
+            traceback.print_exc()
+            # Don't fail the request if WebSocket notification fails
+
+        return {"message": "Petition updated successfully", "petition_id": petition.petition_id}
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        print(f"Error editing petition: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to edit petition: {e}")
+
 @app.get("/categories")
 def get_categories(
     department_id: int = Query(default=None),
@@ -1230,6 +1433,93 @@ def reclassify_petition(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to reclassify petition: {str(e)}")
 
+# Public browse petitions endpoint
+@app.get("/petitions/browse")
+def browse_petitions(
+    db: Session = Depends(get_db),
+    search: str = Query(default=None),
+    status: str = Query(default=None),
+    category: str = Query(default=None),
+    department: str = Query(default=None),
+    sort_by: str = Query(default="newest"),
+    skip: int = Query(default=0),
+    limit: int = Query(default=100)
+):
+    """Browse public petitions with filtering and search"""
+    try:
+        # Base query for public petitions only
+        query = db.query(Petition).filter(Petition.is_public == True)
+        
+        # Search filter
+        if search:
+            search_term = f"%{search}%"
+            query = query.filter(
+                or_(
+                    Petition.title.ilike(search_term),
+                    Petition.description.ilike(search_term),
+                    Petition.short_description.ilike(search_term)
+                )
+            )
+        
+        # Status filter
+        if status:
+            query = query.filter(Petition.status == status)
+        
+        # Category filter
+        if category:
+            query = query.filter(Petition.category == category)
+        
+        # Department filter
+        if department:
+            query = query.filter(Petition.department == department)
+        
+        # Sorting
+        if sort_by == "newest":
+            query = query.order_by(Petition.submitted_at.desc())
+        elif sort_by == "oldest":
+            query = query.order_by(Petition.submitted_at.asc())
+        elif sort_by == "most-signatures":
+            # For now, order by petition_id (can add signature count later)
+            query = query.order_by(Petition.petition_id.desc())
+        else:
+            query = query.order_by(Petition.submitted_at.desc())
+        
+        # Get total count before pagination
+        total_count = query.count()
+        
+        # Apply pagination
+        petitions = query.offset(skip).limit(limit).all()
+        
+        # Format response
+        result = []
+        for petition in petitions:
+            user = db.query(User).filter(User.user_id == petition.user_id).first()
+            petition_dict = {
+                "petition_id": petition.petition_id,
+                "title": petition.title,
+                "description": petition.description,
+                "short_description": petition.short_description,
+                "category": petition.category,
+                "department": petition.department,
+                "status": petition.status,
+                "urgency_level": petition.urgency_level,
+                "location": petition.location,
+                "submitted_at": petition.submitted_at.isoformat(),
+                "created_by": f"{user.first_name} {user.last_name}" if user else "Anonymous",
+                "signature_count": 0  # Placeholder - can be implemented later
+            }
+            result.append(petition_dict)
+        
+        return {
+            "petitions": result,
+            "total_count": total_count,
+            "has_more": skip + limit < total_count
+        }
+        
+    except Exception as e:
+        print(f"Error browsing petitions: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to browse petitions: {str(e)}")
+
 # Admin endpoints for petition management
 @app.get("/admin/petitions")
 def get_admin_petitions(
@@ -1283,7 +1573,7 @@ def get_admin_petitions(
         raise HTTPException(status_code=500, detail=f"Failed to fetch petitions: {str(e)}")
 
 @app.put("/admin/petitions/{petition_id}/status")
-def update_petition_status(
+async def update_petition_status(
     petition_id: int,
     status: str = Form(...),
     admin_comment: str = Form(default=None),
@@ -1367,7 +1657,42 @@ def update_petition_status(
         
         db.commit()
         db.refresh(petition)
-        
+
+        # Send email to user notifying about status update
+        user = db.query(User).filter(User.user_id == petition.user_id).first()
+        if user and user.email:
+            subject = f"Your Petition #{petition.petition_id} Status Updated: {status.title()}"
+            # Build proof file links if any
+            proof_links = ""
+            if uploaded_files:
+                proof_links = "<li><b>Proof Files:</b><ul>"
+                for fname in uploaded_files:
+                    url = f"http://localhost:8000/uploads/{fname}"
+                    proof_links += f'<li><a href="{url}" target="_blank">{fname}</a></li>'
+                proof_links += "</ul></li>"
+            body = f"""
+            <h2>Dear {user.first_name},</h2>
+            <p>Your petition <b>\"{petition.title}\"</b> has been updated by the admin.</p>
+            <ul>
+                <li><b>Status:</b> {status.title()}</li>
+                {f'<li><b>Admin Comment:</b> {admin_comment}</li>' if admin_comment else ''}
+                {proof_links}
+            </ul>
+            <p>You can view the details and any uploaded proof files by logging in to GrievEase.</p>
+            <br>
+            <p>Thank you,<br>GrievEase Team</p>
+            """
+            send_email(user.email, subject, body)
+
+        # Notify WebSocket clients about the petition update
+        try:
+            user_id = petition.user_id
+            user_petitions = db.query(Petition).filter(Petition.user_id == user_id).all()
+            await notify_user_petitions(user_id, user_petitions)
+        except Exception as ws_error:
+            print(f"WebSocket notification error: {ws_error}")
+            # Don't fail the request if WebSocket notification fails
+
         return {
             "message": "Status updated successfully", 
             "petition_id": petition_id, 
@@ -1661,6 +1986,131 @@ async def transcribe_audio(
     except Exception as e:
         print(f"Transcription error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Transcription failed: {str(e)}")
+
+# WebSocket Endpoints
+
+@app.websocket("/ws/petitions/my/{user_id}")
+async def petitions_ws(websocket: WebSocket, user_id: int):
+    """
+    WebSocket endpoint for a specific user. Clients should connect to:
+      ws://<host>:<port>/ws/petitions/my/<user_id>
+    (If you need auth over WS, send token after connecting or include ?token=... and validate.)
+    """
+    await websocket.accept()
+    user_connections.setdefault(user_id, []).append(websocket)
+    print(f"User {user_id} WS connected, total connections: {len(user_connections.get(user_id, []))}")
+    try:
+        while True:
+            # keep connection alive; clients may send pings
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        if user_id in user_connections and websocket in user_connections[user_id]:
+            user_connections[user_id].remove(websocket)
+            if not user_connections[user_id]:
+                del user_connections[user_id]
+        print(f"User {user_id} WS disconnected")
+    except Exception as e:
+        if user_id in user_connections and websocket in user_connections[user_id]:
+            user_connections[user_id].remove(websocket)
+            if not user_connections[user_id]:
+                del user_connections[user_id]
+        print(f"User {user_id} WS error: {e}")
+
+@app.websocket("/ws/petitions")
+async def global_petitions_ws(websocket: WebSocket):
+    """Global websocket; fallback for all clients."""
+    await websocket.accept()
+    global_connections.append(websocket)
+    print("Global WS connected, total:", len(global_connections))
+    try:
+        while True:
+            await websocket.receive_text()  # keep alive
+    except WebSocketDisconnect:
+        try:
+            global_connections.remove(websocket)
+        except ValueError:
+            pass
+        print("Global WS disconnected, total:", len(global_connections))
+    except Exception as e:
+        try:
+            global_connections.remove(websocket)
+        except ValueError:
+            pass
+        print("Global WS error:", e)
+
+# Helper function to notify user about petition updates
+async def notify_user_petitions(user_id: int, petitions: List[Petition]):
+    """Send petition updates to connected WebSocket clients"""
+    print(f"📡 notify_user_petitions called for user {user_id}")
+    print(f"   User connections: {len(user_connections.get(user_id, []))}")
+    print(f"   Global connections: {len(global_connections)}")
+    
+    if user_id not in user_connections and not global_connections:
+        print(f"⚠️ No WebSocket connections found for user {user_id}")
+        return
+
+    # Serialize petitions
+    def serialize_petition(p: Petition):
+        try:
+            return {
+                "petition_id": p.petition_id,
+                "title": p.title,
+                "description": p.description,
+                "short_description": p.short_description,
+                "category": p.category if p.category else "Unknown",
+                "status": p.status,
+                "signatureCount": 0,  # Add signature count logic if needed
+                "submitted_at": p.submitted_at.isoformat() if p.submitted_at else None,
+                "updates": 0  # Simplified - can be enhanced later
+            }
+        except Exception as e:
+            print(f"Error serializing petition {p.petition_id}: {e}")
+            raise
+
+    try:
+        serialized_petitions = [serialize_petition(p) for p in petitions]
+        payload = {"type": "update", "petitions": serialized_petitions}
+        print(f"📦 Payload prepared with {len(serialized_petitions)} petitions")
+    except Exception as e:
+        print(f"❌ Error preparing payload: {e}")
+        return
+
+    # Send to user-specific connections
+    sent_count = 0
+    to_remove = []
+    for ws in list(user_connections.get(user_id, [])):
+        try:
+            await ws.send_json(payload)
+            sent_count += 1
+            print(f"✅ Sent to user-specific WebSocket connection")
+        except Exception as e:
+            print(f"❌ Error sending to user-specific WebSocket: {e}")
+            to_remove.append(ws)
+    for ws in to_remove:
+        try:
+            user_connections[user_id].remove(ws)
+        except ValueError:
+            pass
+    if user_id in user_connections and not user_connections[user_id]:
+        del user_connections[user_id]
+
+    # Send to global connections (fallback)
+    g_remove = []
+    for ws in list(global_connections):
+        try:
+            await ws.send_json(payload)
+            sent_count += 1
+            print(f"✅ Sent to global WebSocket connection")
+        except Exception as e:
+            print(f"❌ Error sending to global WebSocket: {e}")
+            g_remove.append(ws)
+    for ws in g_remove:
+        try:
+            global_connections.remove(ws)
+        except ValueError:
+            pass
+    
+    print(f"📊 WebSocket notification summary: {sent_count} messages sent successfully")
 
 if __name__ == "__main__":
     import uvicorn

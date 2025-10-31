@@ -1,5 +1,5 @@
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,163 +7,151 @@ import { Search, Filter, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Card, CardContent, CardFooter } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
+import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
 
-// Mock data for petitions
-const MOCK_PETITIONS = [
-  {
-    id: '1',
-    title: 'Fix the pothole on Main Street',
-    description: 'The large pothole on Main Street has been causing traffic issues and damage to vehicles.',
-    category: 'Infrastructure',
-    status: 'Pending',
-    signatureCount: 156,
-    createdAt: '2025-04-15',
-    createdBy: 'Arun Kumar'
-  },
-  {
-    id: '2',
-    title: 'Install streetlights in Park Colony',
-    description: 'Park Colony needs proper streetlights for safety at night. There have been several incidents of theft.',
-    category: 'Safety',
-    status: 'In Progress',
-    signatureCount: 432,
-    createdAt: '2025-04-10',
-    createdBy: 'Priya Sharma'
-  },
-  {
-    id: '3',
-    title: 'Clean the Ganges river bank',
-    description: 'The river bank near the temple has accumulated trash and needs immediate attention.',
-    category: 'Environment',
-    status: 'Completed',
-    signatureCount: 892,
-    createdAt: '2025-03-28',
-    createdBy: 'Rahul Singh'
-  },
-  {
-    id: '4',
-    title: 'Improve bus service frequency',
-    description: 'Request to increase bus frequency during peak hours to reduce overcrowding.',
-    category: 'Transportation',
-    status: 'Pending',
-    signatureCount: 257,
-    createdAt: '2025-04-02',
-    createdBy: 'Deepa Patel'
-  },
-  {
-    id: '5',
-    title: 'Repair playground equipment',
-    description: 'The swings and slides at Community Park are damaged and pose safety risks to children.',
-    category: 'Recreation',
-    status: 'In Progress',
-    signatureCount: 124,
-    createdAt: '2025-04-08',
-    createdBy: 'Mohammed Khan'
-  },
-  {
-    id: '6',
-    title: 'Request for free health camp',
-    description: 'Organizing a free health check-up camp in the underserved area of East Village.',
-    category: 'Healthcare',
-    status: 'Pending',
-    signatureCount: 368,
-    createdAt: '2025-04-12',
-    createdBy: 'Dr. Vijay Reddy'
-  },
-  {
-    id: '7',
-    title: 'Request for free health camp',
-    description: 'Organizing a free health check-up camp in the underserved area of East Village.',
-    category: 'Healthcare',
-    status: 'Pending',
-    signatureCount: 368,
-    createdAt: '2025-04-12',
-    createdBy: 'Dr. Vijay Reddy'
-  },
-  {
-    id: '8',
-    title: 'Request for free health camp',
-    description: 'Organizing a free health check-up camp in the underserved area of East Village.',
-    category: 'Healthcare',
-    status: 'Pending',
-    signatureCount: 368,
-    createdAt: '2025-04-12',
-    createdBy: 'Dr. Vijay Reddy'
-  },
-  {
-    id: '9',
-    title: 'Request for free health camp',
-    description: 'Organizing a free health check-up camp in the underserved area of East Village.',
-    category: 'Healthcare',
-    status: 'Pending',
-    signatureCount: 368,
-    createdAt: '2025-04-12',
-    createdBy: 'Dr. Vijay Reddy'
-  }
-];  
+// API Types
+interface Petition {
+  petition_id: number;
+  title: string;
+  description: string;
+  short_description: string;
+  category: string;
+  department: string;
+  status: string;
+  urgency_level: string;
+  location: string;
+  submitted_at: string;
+  created_by: string;
+  signature_count: number;
+}
+
+interface BrowseResponse {
+  petitions: Petition[];
+  total_count: number;
+  has_more: boolean;
+}
+
+// Note: Category/Department types removed as page no longer fetches them
 
 // Define status badge colors
 const STATUS_COLORS = {
-  'Pending': 'bg-yellow-100 text-yellow-800 border-yellow-200',
-  'In Progress': 'bg-blue-100 text-blue-800 border-blue-200',
-  'Completed': 'bg-green-100 text-green-800 border-green-200',
-  'Rejected': 'bg-red-100 text-red-800 border-red-200'
+  'submitted': 'bg-yellow-100 text-yellow-800 border-yellow-200',
+  'under_review': 'bg-blue-100 text-blue-800 border-blue-200',
+  'in_progress': 'bg-purple-100 text-purple-800 border-purple-200',
+  'resolved': 'bg-green-100 text-green-800 border-green-200',
+  'rejected': 'bg-red-100 text-red-800 border-red-200',
+  'escalated': 'bg-orange-100 text-orange-800 border-orange-200'
 };
 
-// Define categories
-const CATEGORIES = [
-  'Infrastructure',
-  'Transportation',
-  'Healthcare',
-  'Education',
-  'Environment',
-  'Safety',
-  'Recreation',
-  'Others'
-];
+// Map backend status to display text
+const STATUS_DISPLAY: Record<string, string> = {
+  'submitted': 'Submitted',
+  'under_review': 'Under Review',
+  'in_progress': 'In Progress',
+  'resolved': 'Resolved',
+  'rejected': 'Rejected',
+  'escalated': 'Escalated'
+};
+
+// All possible statuses
+const ALL_STATUSES = ['submitted', 'under_review', 'in_progress', 'resolved', 'rejected', 'escalated'];
 
 const BrowsePetitionsPage: React.FC = () => {
+  const { toast } = useToast();
+  const { user } = useAuth();
+  
+  // State
+  const [petitions, setPetitions] = useState<Petition[]>([]);
+  // Categories/Departments removed per request
+  const [loading, setLoading] = useState(false);
+  const [totalCount, setTotalCount] = useState(0);
+  
+  // Filters
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<string>('newest');
-  const [selectedStatuses, setSelectedStatuses] = useState<string[]>(['Pending', 'In Progress', 'Completed']);
-  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>(['submitted', 'under_review', 'in_progress']);
   const [currentPage, setCurrentPage] = useState(1);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   
   // Number of petitions per page
   const itemsPerPage = 6;
   
-  // Filter and sort petitions
-  const filteredPetitions = MOCK_PETITIONS.filter(petition => {
-    // Search filter
-    const matchesSearch = petition.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          petition.description.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    // Status filter
-    const matchesStatus = selectedStatuses.length === 0 || selectedStatuses.includes(petition.status);
-    
-    // Category filter
-    const matchesCategory = selectedCategories.length === 0 || selectedCategories.includes(petition.category);
-    
-    return matchesSearch && matchesStatus && matchesCategory;
-  }).sort((a, b) => {
-    // Sort by selected option
-    if (sortBy === 'newest') {
-      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-    } else if (sortBy === 'oldest') {
-      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-    } else if (sortBy === 'most-signatures') {
-      return b.signatureCount - a.signatureCount;
+  // Fetch petitions when filters change
+  useEffect(() => {
+    fetchPetitions();
+  }, [searchQuery, sortBy, selectedStatuses, currentPage]);
+  
+  const fetchPetitions = async () => {
+    setLoading(true);
+    try {
+      // Build query parameters
+      const params = new URLSearchParams();
+      
+      if (searchQuery) params.append('search', searchQuery);
+      if (sortBy) params.append('sort_by', sortBy);
+      
+      // Add status filters
+      if (selectedStatuses.length > 0) {
+        // Backend expects single status, so we'll fetch all and filter client-side
+        // Or we can make multiple requests - for now, let's filter client-side
+      }
+      
+      // Category/Department filters removed per request
+      
+      params.append('skip', String((currentPage - 1) * itemsPerPage));
+      params.append('limit', String(itemsPerPage));
+      
+      const response = await fetch(`http://localhost:8000/public/petitions?${params.toString()}` , {
+        headers: {
+          ...(user?.token ? { Authorization: `Bearer ${user.token}` } : {}),
+          Accept: 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        // Surface specific 401 to help diagnose
+        if (response.status === 401) {
+          throw new Error('Unauthorized (401)');
+        }
+        throw new Error('Failed to fetch petitions');
+      }
+      
+      const data: BrowseResponse = await response.json();
+      
+      // Client-side filtering for multiple statuses
+      let filteredPetitions = data.petitions;
+      if (selectedStatuses.length > 0) {
+        filteredPetitions = filteredPetitions.filter(p => 
+          selectedStatuses.includes(p.status)
+        );
+      }
+      
+      // Category/Department client-side filters removed
+      
+      setPetitions(filteredPetitions);
+      setTotalCount(data.total_count);
+      
+    } catch (error: any) {
+      console.error('Error fetching petitions:', error);
+      const description = error?.message === 'Unauthorized (401)'
+        ? 'Backend responded 401. Ensure enhanced_main.py is running and /petitions/browse is available (public).'
+        : 'Failed to load petitions. Please try again.';
+      toast({
+        title: "Error",
+        description,
+        variant: "destructive"
+      });
+      // Avoid spinner hang and show empty state
+      setPetitions([]);
+      setTotalCount(0);
+    } finally {
+      setLoading(false);
     }
-    return 0;
-  });
+  };
   
   // Pagination
-  const totalPages = Math.ceil(filteredPetitions.length / itemsPerPage);
-  const currentPetitions = filteredPetitions.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  );
+  const totalPages = Math.ceil(totalCount / itemsPerPage);
   
   // Handle filter toggling on mobile
   const toggleFilter = () => {
@@ -180,20 +168,22 @@ const BrowsePetitionsPage: React.FC = () => {
     setCurrentPage(1);
   };
   
-  // Handle category filter change
-  const toggleCategoryFilter = (category: string) => {
-    setSelectedCategories(prev => 
-      prev.includes(category)
-        ? prev.filter(c => c !== category)
-        : [...prev, category]
-    );
-    setCurrentPage(1);
-  };
+  // Category/Department filters removed
   
   // Handle search submission
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     setCurrentPage(1);
+  };
+  
+  // Format date
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-IN', { 
+      year: 'numeric', 
+      month: 'short', 
+      day: 'numeric' 
+    });
   };
   
   return (
@@ -223,7 +213,7 @@ const BrowsePetitionsPage: React.FC = () => {
               <div className="mb-6">
                 <h3 className="font-medium text-gray-900 mb-3">Status</h3>
                 <div className="space-y-2">
-                  {['Pending', 'In Progress', 'Completed', 'Rejected'].map(status => (
+                  {ALL_STATUSES.map(status => (
                     <div key={status} className="flex items-center">
                       <Checkbox 
                         id={`status-${status}`}
@@ -234,34 +224,14 @@ const BrowsePetitionsPage: React.FC = () => {
                         htmlFor={`status-${status}`}
                         className="ml-2 text-sm text-gray-700 cursor-pointer"
                       >
-                        {status}
+                        {STATUS_DISPLAY[status]}
                       </label>
                     </div>
                   ))}
                 </div>
               </div>
               
-              {/* Category Filter */}
-              <div>
-                <h3 className="font-medium text-gray-900 mb-3">Category</h3>
-                <div className="space-y-2">
-                  {CATEGORIES.map(category => (
-                    <div key={category} className="flex items-center">
-                      <Checkbox 
-                        id={`category-${category}`}
-                        checked={selectedCategories.includes(category)}
-                        onCheckedChange={() => toggleCategoryFilter(category)}
-                      />
-                      <label 
-                        htmlFor={`category-${category}`}
-                        className="ml-2 text-sm text-gray-700 cursor-pointer"
-                      >
-                        {category}
-                      </label>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              {/* Category & Department filters intentionally removed per request */}
             </div>
           </div>
           
@@ -297,40 +267,51 @@ const BrowsePetitionsPage: React.FC = () => {
             
             {/* Results Count */}
             <p className="text-sm text-gray-600 mb-4">
-              Showing {filteredPetitions.length} results
+              {loading ? 'Loading...' : `Showing ${petitions.length} of ${totalCount} results`}
             </p>
             
             {/* Petition Cards */}
-            {filteredPetitions.length > 0 ? (
+            {loading ? (
+              <div className="text-center py-12 bg-white rounded-lg shadow">
+                <p className="text-gray-600">Loading petitions...</p>
+              </div>
+            ) : petitions.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-                {currentPetitions.map(petition => (
-                  <Card key={petition.id} className="overflow-hidden border border-gray-200 h-full flex flex-col">
+                {petitions.map(petition => (
+                  <Card key={petition.petition_id} className="overflow-hidden border border-gray-200 h-full flex flex-col">
                     <CardContent className="p-6 flex-grow">
                       <div className="flex justify-between items-start mb-3">
                         <Badge className={`${STATUS_COLORS[petition.status as keyof typeof STATUS_COLORS]} font-normal`}>
-                          {petition.status}
+                          {STATUS_DISPLAY[petition.status]}
                         </Badge>
                         <span className="text-sm text-gray-500">
-                          {petition.createdAt}
+                          {formatDate(petition.submitted_at)}
                         </span>
                       </div>
                       
                       <h3 className="font-semibold text-lg mb-2">
-                        <Link to={`/petitions/${petition.id}`} className="hover:text-primary-blue transition-colors">
+                        <Link to={`/petitions/${petition.petition_id}`} className="hover:text-primary-blue transition-colors">
                           {petition.title}
                         </Link>
                       </h3>
                       
                       <p className="text-gray-600 text-sm mb-4 line-clamp-2">
-                        {petition.description}
+                        {petition.description || petition.short_description}
                       </p>
                       
-                      <div className="flex items-center justify-between">
-                        <Badge variant="outline" className="bg-blue-50">
-                          {petition.category}
-                        </Badge>
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <div className="flex gap-2">
+                          <Badge variant="outline" className="bg-blue-50">
+                            {petition.category}
+                          </Badge>
+                          {petition.department && (
+                            <Badge variant="outline" className="bg-purple-50">
+                              {petition.department}
+                            </Badge>
+                          )}
+                        </div>
                         <span className="text-sm text-gray-600">
-                          <strong>{petition.signatureCount}</strong> signatures
+                          <strong>{petition.signature_count}</strong> signatures
                         </span>
                       </div>
                     </CardContent>
@@ -338,9 +319,9 @@ const BrowsePetitionsPage: React.FC = () => {
                     <CardFooter className="border-t bg-gray-50 p-4">
                       <div className="w-full flex justify-between items-center">
                         <span className="text-xs text-gray-500">
-                          Created by: {petition.createdBy}
+                          By: {petition.created_by}
                         </span>
-                        <Link to={`/petitions/${petition.id}`}>
+                        <Link to={`/petitions/${petition.petition_id}`}>
                           <Button 
                             variant="outline"
                             size="sm"
@@ -363,8 +344,7 @@ const BrowsePetitionsPage: React.FC = () => {
                 <Button
                   onClick={() => {
                     setSearchQuery('');
-                    setSelectedStatuses(['Pending', 'In Progress', 'Completed']);
-                    setSelectedCategories([]);
+                    setSelectedStatuses(['submitted', 'under_review', 'in_progress']);
                   }}
                   variant="outline"
                   className="border-primary-blue text-primary-blue hover:bg-blue-50"
@@ -375,7 +355,7 @@ const BrowsePetitionsPage: React.FC = () => {
             )}
             
             {/* Pagination */}
-            {filteredPetitions.length > itemsPerPage && (
+            {totalCount > itemsPerPage && (
               <div className="flex justify-center mt-6">
                 <nav className="flex items-center gap-1">
                   <Button

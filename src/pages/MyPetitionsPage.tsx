@@ -93,56 +93,69 @@ const MyPetitionsPage: React.FC = () => {
     // initial load
     fetchPetitions();
 
-    const uid = (user as any)?.userId ?? (user as any)?.userId ?? (user as any)?.userId;
+    // Get user ID for WebSocket connection
+    const uid = user?.userId;
+    console.log("User ID for WebSocket:", uid);
+    
     // per-user WS (preferred)
     if (uid) {
       try {
         wsUser = new WebSocket(`ws://localhost:8000/ws/petitions/my/${uid}`);
-        wsUser.onopen = () => console.log("User WS open", uid);
+        wsUser.onopen = () => console.log("✅ User WS open", uid);
         wsUser.onmessage = (ev) => {
           try {
             const payload = JSON.parse(ev.data);
+            console.log("📨 User WS message received:", payload);
+            
             // If server sends full petitions list, replace; otherwise react to type:update by refetch
             if (Array.isArray(payload)) {
+              console.log("🔄 Updating petitions from array payload");
               setPetitions(payload);
+            } else if (payload?.type === 'update' && Array.isArray(payload.petitions)) {
+              console.log("🔄 Updating petitions from update message");
+              setPetitions(payload.petitions);
             } else if (payload?.type === 'update') {
+              console.log("🔄 Refetching petitions");
               fetchPetitions();
-            } else if (Array.isArray((payload as any).petitions)) {
-              setPetitions((payload as any).petitions);
             }
           } catch (e) {
             console.error("User WS parse error", e);
           }
         };
-        wsUser.onerror = (e) => console.warn("User WS error", e);
-        wsUser.onclose = () => console.log("User WS closed");
+        wsUser.onerror = (e) => console.warn("⚠️ User WS error", e);
+        wsUser.onclose = () => console.log("🔌 User WS closed");
       } catch (e) {
-        console.warn("User WS connect failed", e);
+        console.warn("⚠️ User WS connect failed", e);
       }
     }
 
     // global WS fallback
     try {
       wsGlobal = new WebSocket(`ws://localhost:8000/ws/petitions`);
-      wsGlobal.onopen = () => console.log("Global WS open");
+      wsGlobal.onopen = () => console.log("✅ Global WS open");
       wsGlobal.onmessage = (ev) => {
         try {
           const payload = JSON.parse(ev.data);
+          console.log("📨 Global WS message received:", payload);
+          
           if (Array.isArray(payload)) {
+            console.log("🔄 Updating petitions from array payload");
             setPetitions(payload);
+          } else if (payload?.type === 'update' && Array.isArray(payload.petitions)) {
+            console.log("🔄 Updating petitions from update message");
+            setPetitions(payload.petitions);
           } else if (payload?.type === 'update') {
+            console.log("🔄 Refetching petitions");
             fetchPetitions();
-          } else if (Array.isArray((payload as any).petitions)) {
-            setPetitions((payload as any).petitions);
           }
         } catch (e) {
           console.error("Global WS parse error", e);
         }
       };
-      wsGlobal.onerror = (e) => console.warn("Global WS error", e);
-      wsGlobal.onclose = () => console.log("Global WS closed");
+      wsGlobal.onerror = (e) => console.warn("⚠️ Global WS error", e);
+      wsGlobal.onclose = () => console.log("🔌 Global WS closed");
     } catch (e) {
-      console.warn("Global WS connect failed", e);
+      console.warn("⚠️ Global WS connect failed", e);
     }
 
     return () => {
@@ -151,7 +164,7 @@ const MyPetitionsPage: React.FC = () => {
       try { wsGlobal?.close(); } catch {}
       wsUser = wsGlobal = null;
     };
-  }, [user?.token, user?.userId, toast]);
+  }, [user?.token, user, toast]);
   
   // Filter petitions based on active tab and search query
   const filteredPetitions = petitions.filter(petition => {

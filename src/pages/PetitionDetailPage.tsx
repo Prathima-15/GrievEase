@@ -112,58 +112,149 @@ const PetitionDetailPage: React.FC = () => {
     }
   };
 
-  useEffect(() => {
-    const fetchPetition = async () => {
-      try {
-        // Use admin endpoint if user is admin, otherwise use regular endpoint
-        const endpoint = isAdmin 
-          ? `http://localhost:8000/admin/petitions`
-          : `http://localhost:8000/petitions/${id}`;
-        
-        const response = await fetch(endpoint, {
-          headers: {
-            'Authorization': `Bearer ${user?.token}`
-          }
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => null);
-          throw new Error(errorData?.detail || 'Failed to fetch petition');
+  const fetchPetitionData = async () => {
+    try {
+      // Use admin endpoint if user is admin, otherwise use regular endpoint
+      const endpoint = isAdmin 
+        ? `http://localhost:8000/admin/petitions`
+        : `http://localhost:8000/petitions/${id}`;
+      
+      const response = await fetch(endpoint, {
+        headers: {
+          'Authorization': `Bearer ${user?.token}`
         }
+      });
 
-        const data = await response.json();
-        
-        if (isAdmin) {
-          // Find the specific petition from admin list
-          const foundPetition = data.find((p: any) => p.petition_id === parseInt(id!));
-          if (!foundPetition) {
-            throw new Error('Petition not found');
-          }
-          setPetition(foundPetition);
-          setNewStatus(foundPetition.status);
-        } else {
-          setPetition(data);
-        }
-        
-        // Fetch updates for all users (both admin and regular users)
-        fetchPetitionUpdates();
-      } catch (error) {
-        console.error("Failed to fetch petition:", error);
-        setError(error instanceof Error ? error.message : "Failed to load petition");
-        toast({
-          title: "Error",
-          description: error instanceof Error ? error.message : "Failed to load petition",
-          variant: "destructive",
-        });
-      } finally {
-        setLoading(false);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        throw new Error(errorData?.detail || 'Failed to fetch petition');
       }
-    };
 
-    if (user?.token && id) {
-      fetchPetition();
+      const data = await response.json();
+      
+      if (isAdmin) {
+        // Find the specific petition from admin list
+        const foundPetition = data.find((p: any) => p.petition_id === parseInt(id!));
+        if (!foundPetition) {
+          throw new Error('Petition not found');
+        }
+        setPetition(foundPetition);
+        setNewStatus(foundPetition.status);
+      } else {
+        setPetition(data);
+      }
+      
+      // Fetch updates for all users (both admin and regular users)
+      fetchPetitionUpdates();
+    } catch (error) {
+      console.error("Failed to fetch petition:", error);
+      setError(error instanceof Error ? error.message : "Failed to load petition");
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to load petition",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
     }
-  }, [id, user?.token, isAdmin, toast]);
+  };
+
+  // WebSocket connection for real-time updates
+  useEffect(() => {
+    if (!user?.token || !id) return;
+
+    let wsUser: WebSocket | null = null;
+    let wsGlobal: WebSocket | null = null;
+    let mounted = true;
+
+    // Initial fetch
+    fetchPetitionData();
+
+    // Get user ID for WebSocket connection
+    const uid = user?.userId;
+    console.log("🔌 Setting up WebSocket for petition detail page, user ID:", uid);
+
+    // Connect to user-specific WebSocket
+    if (uid) {
+      try {
+        wsUser = new WebSocket(`ws://localhost:8000/ws/petitions/my/${uid}`);
+        wsUser.onopen = () => console.log("✅ Petition Detail - User WS open", uid);
+        wsUser.onmessage = (ev) => {
+          try {
+            const payload = JSON.parse(ev.data);
+            console.log("📨 Petition Detail - User WS message received:", payload);
+            
+            // Check if the update is for the current petition
+            if (payload?.type === 'update' && Array.isArray(payload.petitions)) {
+              const updatedPetition = payload.petitions.find(
+                (p: any) => p.petition_id === parseInt(id!)
+              );
+              
+              if (updatedPetition) {
+                console.log("🔄 Updating petition details from WebSocket");
+                setPetition(prev => prev ? { ...prev, ...updatedPetition } : updatedPetition);
+                // Also refresh updates
+                fetchPetitionUpdates();
+                
+                toast({
+                  title: "Petition Updated",
+                  description: "This petition has been updated.",
+                });
+              }
+            }
+          } catch (e) {
+            console.error("Petition Detail - User WS parse error", e);
+          }
+        };
+        wsUser.onerror = (e) => console.warn("⚠️ Petition Detail - User WS error", e);
+        wsUser.onclose = () => console.log("🔌 Petition Detail - User WS closed");
+      } catch (e) {
+        console.warn("⚠️ Petition Detail - User WS connect failed", e);
+      }
+    }
+
+    // Connect to global WebSocket as fallback
+    try {
+      wsGlobal = new WebSocket(`ws://localhost:8000/ws/petitions`);
+      wsGlobal.onopen = () => console.log("✅ Petition Detail - Global WS open");
+      wsGlobal.onmessage = (ev) => {
+        try {
+          const payload = JSON.parse(ev.data);
+          console.log("📨 Petition Detail - Global WS message received:", payload);
+          
+          if (payload?.type === 'update' && Array.isArray(payload.petitions)) {
+            const updatedPetition = payload.petitions.find(
+              (p: any) => p.petition_id === parseInt(id!)
+            );
+            
+            if (updatedPetition) {
+              console.log("🔄 Updating petition details from Global WebSocket");
+              setPetition(prev => prev ? { ...prev, ...updatedPetition } : updatedPetition);
+              fetchPetitionUpdates();
+              
+              toast({
+                title: "Petition Updated",
+                description: "This petition has been updated.",
+              });
+            }
+          }
+        } catch (e) {
+          console.error("Petition Detail - Global WS parse error", e);
+        }
+      };
+      wsGlobal.onerror = (e) => console.warn("⚠️ Petition Detail - Global WS error", e);
+      wsGlobal.onclose = () => console.log("🔌 Petition Detail - Global WS closed");
+    } catch (e) {
+      console.warn("⚠️ Petition Detail - Global WS connect failed", e);
+    }
+
+    return () => {
+      mounted = false;
+      try { wsUser?.close(); } catch {}
+      try { wsGlobal?.close(); } catch {}
+      wsUser = wsGlobal = null;
+    };
+  }, [id, user?.token, user?.userId, isAdmin, toast]);
 
   // Handle file selection
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
