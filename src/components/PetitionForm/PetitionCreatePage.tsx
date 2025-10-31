@@ -39,6 +39,7 @@ const PetitionCreatePage: React.FC = () => {
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [aiClassification, setAiClassification] = useState<AIClassificationResult | null>(null);
   const [petitionId, setPetitionId] = useState<number | null>(null);
+  const [isValidating, setIsValidating] = useState(false);
   
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -54,7 +55,16 @@ const PetitionCreatePage: React.FC = () => {
     { title: 'Review', icon: <Check className="w-5 h-5" /> }
   ];
 
-  const handleNextStep = () => {
+  const handleNextStep = async () => {
+    // Special validation for Step 4 -> Step 5 (Evidence -> Review)
+    if (currentStep === 4) {
+      const isValid = await validatePetitionWithAPI();
+      if (!isValid) {
+        // Don't proceed to next step if validation fails
+        return;
+      }
+    }
+    
     if (currentStep < totalSteps) {
       setCurrentStep(currentStep + 1);
       window.scrollTo(0, 0);
@@ -150,6 +160,8 @@ const PetitionCreatePage: React.FC = () => {
         filesCount: evidenceFiles.length
       });
 
+      console.log('🚀 Sending request to http://localhost:8000/petitions/create');
+
       const response = await fetch('http://localhost:8000/petitions/create', {
         method: 'POST',
         body: formData,
@@ -158,20 +170,32 @@ const PetitionCreatePage: React.FC = () => {
         },
       });
 
+      console.log('📡 Response received:', {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok
+      });
+
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        console.error('Submission error:', errorData);
+        console.error('❌ Submission error:', errorData);
         throw new Error(errorData.detail || `Failed to submit petition (${response.status})`);
       }
 
       const data = await response.json();
-      console.log('Petition submitted successfully:', data);
+      console.log('✅ Petition submitted successfully!');
+      console.log('📦 Full response data:', data);
+      console.log('🤖 AI Classification data:', data.ai_classification);
       
       // Store AI classification results and petition ID
       if (data.ai_classification) {
+        console.log('✅ Setting AI classification state with:', data.ai_classification);
         setAiClassification(data.ai_classification);
+      } else {
+        console.warn('⚠️ No ai_classification in response!');
       }
       if (data.petition_id) {
+        console.log('✅ Setting petition ID:', data.petition_id);
         setPetitionId(data.petition_id);
       }
       setIsSubmitted(true);
@@ -208,6 +232,60 @@ const PetitionCreatePage: React.FC = () => {
   const validateStep4 = () => {
     // Evidence files are optional, so always return true
     return true;
+  };
+  
+  const validatePetitionWithAPI = async (): Promise<boolean> => {
+    setIsValidating(true);
+    
+    try {
+      // Validate petition description with proof files
+      const formData = new FormData();
+      formData.append('text', longDescription);
+      
+      // Add the first evidence file if available
+      if (evidenceFiles.length > 0) {
+        formData.append('image', evidenceFiles[0]);
+      }
+      
+      const response = await fetch('http://localhost:7001/validate', {
+        method: 'POST',
+        body: formData,
+        headers: {
+          'Authorization': `Bearer ${user?.token}`,
+        },
+      });
+      
+      if (!response.ok) {
+        throw new Error('Validation request failed');
+      }
+      
+      const result = await response.json();
+      console.log('Validation result:', result);
+      if (result.is_valid) {
+        toast({
+          title: "✅ Validation Successful",
+          description: "Your petition and proof have been validated successfully.",
+        });
+        return true;
+      } else {
+        toast({
+          title: "❌ Validation Failed",
+          description: "The given proof or petition description is invalid. Please review and update your submission.",
+          variant: "destructive",
+        });
+        return false;
+      }
+    } catch (error) {
+      console.error('Validation error:', error);
+      toast({
+        title: "⚠️ Validation Error",
+        description: "Failed to validate petition. Please try again.",
+        variant: "destructive",
+      });
+      return false;
+    } finally {
+      setIsValidating(false);
+    }
   };
   
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -424,8 +502,15 @@ const PetitionCreatePage: React.FC = () => {
                 <h2 className="text-xl font-semibold">Upload Supporting Evidence</h2>
                 <p className="text-gray-600 text-sm">
                   Upload any documents, images, or other files that support your petition. 
-                  Multiple files are allowed.
+                  Multiple files are allowed. Your petition will be validated before proceeding.
                 </p>
+                
+                {/* Validation Info Alert */}
+                <Alert className="bg-blue-50 border-blue-200">
+                  <AlertDescription className="text-blue-800 text-sm">
+                    📋 <strong>Validation Required:</strong> When you click "Validate & Continue", our system will verify that your petition description and proof are valid and appropriate before allowing you to proceed.
+                  </AlertDescription>
+                </Alert>
                 
                 <div className="space-y-4">
                   <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
@@ -557,10 +642,52 @@ const PetitionCreatePage: React.FC = () => {
                 
                 {/* AI Classification Summary */}
                 {aiClassification && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6 max-w-md mx-auto">
-                    <h3 className="font-semibold text-blue-900 mb-2">Routed to:</h3>
-                    <p className="text-blue-800 font-medium">{aiClassification.department}</p>
-                    <p className="text-blue-700 text-sm">{aiClassification.category}</p>
+                  <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-300 rounded-lg p-6 mb-6 max-w-md mx-auto shadow-md">
+                    <div className="flex items-center justify-center mb-4">
+                      <Brain className="h-6 w-6 text-blue-600 mr-2" />
+                      <h3 className="font-bold text-blue-900 text-lg">AI Classification Results</h3>
+                    </div>
+                    
+                    <div className="space-y-3 text-left">
+                      <div className="bg-white rounded-lg p-3">
+                        <p className="text-xs text-gray-600 mb-1 font-medium">Department</p>
+                        <p className="text-blue-900 font-semibold">{aiClassification.department}</p>
+                      </div>
+                      
+                      <div className="bg-white rounded-lg p-3">
+                        <p className="text-xs text-gray-600 mb-1 font-medium">Category</p>
+                        <p className="text-blue-800 font-medium">{aiClassification.category}</p>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="bg-white rounded-lg p-3">
+                          <p className="text-xs text-gray-600 mb-1 font-medium">Priority</p>
+                          <Badge 
+                            variant={
+                              aiClassification.urgency_level === 'critical' ? 'destructive' :
+                              aiClassification.urgency_level === 'high' ? 'default' :
+                              aiClassification.urgency_level === 'medium' ? 'secondary' : 
+                              'outline'
+                            }
+                            className="mt-1 text-xs font-bold"
+                          >
+                            {aiClassification.urgency_level.toUpperCase()}
+                          </Badge>
+                        </div>
+                        
+                        <div className="bg-white rounded-lg p-3">
+                          <p className="text-xs text-gray-600 mb-1 font-medium">Confidence</p>
+                          <p className="text-blue-900 font-semibold text-lg">{aiClassification.confidence}%</p>
+                        </div>
+                      </div>
+                      
+                      {aiClassification.reasoning && (
+                        <div className="bg-white rounded-lg p-3">
+                          <p className="text-xs text-gray-600 mb-1 font-medium">AI Analysis</p>
+                          <p className="text-gray-700 text-sm italic">{aiClassification.reasoning}</p>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
                 
@@ -644,12 +771,22 @@ const PetitionCreatePage: React.FC = () => {
                       (currentStep === 3 && !validateStep3()) ||
                       (currentStep === 4 && !validateStep4()) ||
                       isLoading ||
-                      isSubmitting
+                      isSubmitting ||
+                      isValidating
                     }
                     className="bg-primary-blue hover:bg-blue-600"
                   >
-                    Next
-                    <ChevronRight className="h-4 w-4 ml-2" />
+                    {isValidating && currentStep === 4 ? (
+                      <div className="flex items-center">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                        Validating...
+                      </div>
+                    ) : (
+                      <>
+                        {currentStep === 4 ? "Validate & Continue" : "Next"}
+                        <ChevronRight className="h-4 w-4 ml-2" />
+                      </>
+                    )}
                   </Button>
                 ) : null}
               </div>

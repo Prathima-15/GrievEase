@@ -5,6 +5,8 @@ This version uses the enhanced tables: users, officers, petitions, departments, 
 
 import os
 import bcrypt
+import httpx
+import traceback
 from fastapi import FastAPI, HTTPException, Form, Depends, UploadFile, File, Query
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,11 +15,11 @@ from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy import create_engine, or_, and_
 from enhanced_models import Base, User, Officer, Petition, Department, PetitionEvidence, Escalation, Notification, Category
 from enhanced_models import PetitionUpdate as PetitionUpdateModel
-from ai_classification import get_ai_classifier
+# Removed: from ai_classification import get_ai_classifier (not used - we call external API)
 from jose import JWTError, jwt
 from datetime import datetime, timedelta, timezone
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Any
 from fastapi.staticfiles import StaticFiles
 import asyncio
 from fastapi import WebSocket, WebSocketDisconnect
@@ -29,6 +31,13 @@ DATABASE_URL = "postgresql://postgres:1234@localhost/grievease_db"
 SECRET_KEY = "secret"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
+
+# Gladia API configuration for speech-to-text
+GLADIA_API_KEY = "c12a192d-9353-42d3-b24c-cc69f3c27aa5"
+GLADIA_API_URL = "https://api.gladia.io"
+
+# AI Classification API configuration
+AI_CLASSIFICATION_URL = "http://localhost:8002/predict"
 
 # Create database engine and session
 engine = create_engine(DATABASE_URL)
@@ -247,6 +256,111 @@ def get_current_admin_user(current_user: dict = Depends(get_current_user)):
     if current_user.get("type") != "officer":
         raise HTTPException(status_code=403, detail="Admin access required")
     return current_user
+
+# Helper function to call AI classification API
+async def classify_petition_with_ai(description: str) -> dict:
+    """
+    Call the AI classification API to classify petition
+    
+    Args:
+        description: The petition description text
+        
+    Returns:
+        dict with department, grievance_type, urgency score, and urgency_level
+    """
+    print("=" * 80)
+    print(f"🤖 CALLING AI CLASSIFICATION API: {AI_CLASSIFICATION_URL}")
+    print(f"📝 Description (first 200 chars): {description[:200]}...")
+    print("=" * 80)
+    
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            print(f"⏳ Sending POST request to {AI_CLASSIFICATION_URL}...")
+            response = await client.post(
+                AI_CLASSIFICATION_URL,
+                json={"description": description}
+            )
+            
+            print(f"📡 Response status code: {response.status_code}")
+            
+            if response.status_code != 200:
+                print(f"❌ AI Classification API error: {response.status_code}")
+                print(f"Response body: {response.text}")
+                # Return default classification if API fails
+                return {
+                    "department": "General Services",
+                    "grievance_type": "General Complaint",
+                    "urgency": 2.5,
+                    "urgency_level": "medium",
+                    "confidence": 0
+                }
+            
+            data = response.json()
+            print(f"✅ AI API Response: {data}")
+            prediction = data.get("prediction", {})
+            
+            # Extract values from prediction
+            department = prediction.get("department", "General Services")
+            grievance_type = prediction.get("grievance_type", "General Complaint")
+            urgency_score = prediction.get("urgency", 2.5)
+            
+            print(f"📊 Extracted from AI:")
+            print(f"   - Department: {department}")
+            print(f"   - Grievance Type: {grievance_type}")
+            print(f"   - Urgency Score: {urgency_score}")
+            
+            # Convert urgency score to urgency_level category
+            # Handle scores that may exceed 5.0
+            if urgency_score >= 4.0:
+                urgency_level = "critical"
+            elif urgency_score >= 3.0:
+                urgency_level = "high"
+            elif urgency_score >= 2.0:
+                urgency_level = "medium"
+            else:
+                urgency_level = "low"
+            
+            print(f"   - Urgency Level (converted): {urgency_level}")
+            
+            # Calculate confidence from top department confidence if available
+            # Otherwise use urgency score
+            top_departments = prediction.get("top3_departments", [])
+            if top_departments and len(top_departments) > 0:
+                confidence = int(top_departments[0].get("confidence", 50))
+                print(f"   - Confidence (from top dept): {confidence}%")
+            else:
+                # Fallback: convert urgency to confidence (cap at 100)
+                confidence = min(int(urgency_score * 20), 100)
+                print(f"   - Confidence (from urgency): {confidence}%")
+            
+            result = {
+                "department": department,
+                "grievance_type": grievance_type,
+                "urgency": urgency_score,
+                "urgency_level": urgency_level,
+                "confidence": confidence
+            }
+            
+            print(f"🎯 Final AI Classification Result: {result}")
+            print("=" * 80)
+            return result
+            
+    except Exception as e:
+        print("=" * 80)
+        print(f"❌ ERROR calling AI classification API!")
+        print(f"Exception type: {type(e).__name__}")
+        print(f"Exception message: {str(e)}")
+        print(f"Traceback:\n{traceback.format_exc()}")
+        print("=" * 80)
+        
+        # Return default classification if API fails
+        return {
+            "department": "General Services",
+            "grievance_type": "General Complaint",
+            "urgency": 2.5,
+            "urgency_level": "medium",
+            "confidence": 0
+        }
 
 # API Endpoints
 
@@ -700,7 +814,7 @@ async def get_analytics(
 
 @app.post("/petitions")
 @app.post("/petitions/create")
-def create_petition(
+async def create_petition(
     title: str = Form(...),
     description: str = Form(...),
     short_description: str = Form(default=None),
@@ -713,7 +827,7 @@ def create_petition(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Create a new petition with AI classification (including auto-determined urgency)"""
+    """Create a new petition with AI classification from external API (including auto-determined urgency)"""
     try:
         print(f"Creating petition for user: {current_user}")
         print(f"Petition data: title='{title}', location='{state}, {district}'")
@@ -736,47 +850,53 @@ def create_petition(
         if not state or not district:
             raise HTTPException(status_code=400, detail="State and district are required")
 
-        # Initialize AI classifier
-        try:
-            ai_classifier = get_ai_classifier(db)
-            print("AI classifier initialized successfully")
-        except Exception as e:
-            print(f"AI classifier initialization failed: {str(e)}")
-            # Fallback to default classification
-            ai_classifier = None
+        # Call external AI classification API
+        print(f"Calling AI classification API with description: {description[:100]}...")
+        ai_result = await classify_petition_with_ai(description)
         
-        # AI classify the petition (including urgency determination)
-        if ai_classifier:
-            try:
-                classification_result = ai_classifier.classify_petition(
-                    title=title,
-                    description=description,
-                    location=location
-                )
-                print(f"AI classification result: {classification_result}")
-            except Exception as e:
-                print(f"AI classification failed: {str(e)}")
-                # Fallback to default department and urgency
-                classification_result = {
-                    "department_id": 1,
-                    "department_name": "General",
-                    "category_id": 1,
-                    "category_name": "General Inquiry",
-                    "urgency_level": "medium",
-                    "confidence": 0.5,
-                    "ai_reasoning": "Default classification due to AI failure"
-                }
-        else:
-            # Default classification when AI is not available
-            classification_result = {
-                "department_id": 1,
-                "department_name": "General",
-                "category_id": 1,
-                "category_name": "General Inquiry",
-                "urgency_level": "medium",
-                "confidence": 0.5,
-                "ai_reasoning": "AI classifier not available"
-            }
+        print(f"AI classification result: {ai_result}")
+        
+        # Get or create department based on AI classification
+        department_name = ai_result["department"]
+        department = db.query(Department).filter(Department.department_name == department_name).first()
+        
+        if not department:
+            # Create new department if it doesn't exist
+            print(f"Creating new department: {department_name}")
+            department = Department(department_name=department_name, description=f"Auto-created from AI classification")
+            db.add(department)
+            db.commit()
+            db.refresh(department)
+        
+        # Get or create category based on AI classification
+        category_name = ai_result["grievance_type"]
+        category = db.query(Category).filter(
+            and_(Category.category_name == category_name, Category.department_id == department.department_id)
+        ).first()
+        
+        if not category:
+            # Create new category if it doesn't exist
+            print(f"Creating new category: {category_name} under department {department_name}")
+            category = Category(
+                category_name=category_name,
+                category_code=category_name.upper().replace(" ", "_")[:20],  # Generate code from name
+                department_id=department.department_id,
+                description=f"Auto-created from AI classification"
+            )
+            db.add(category)
+            db.commit()
+            db.refresh(category)
+        
+        # Build classification result
+        classification_result = {
+            "department_id": department.department_id,
+            "department_name": department_name,
+            "category_id": category.category_id,
+            "category_name": category_name,
+            "urgency_level": ai_result["urgency_level"],
+            "confidence": ai_result["confidence"],
+            "ai_reasoning": f"AI classified with urgency score {ai_result['urgency']:.2f}"
+        }
         
         # Handle file uploads
         file_urls = []
@@ -1419,6 +1539,128 @@ def get_all_officers_admin(
     except Exception as e:
         print(f"Error fetching officers: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch officers: {str(e)}")
+
+@app.post("/transcribe")
+async def transcribe_audio(
+    audio_file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Transcribe Tamil audio file and translate to English using Gladia API
+    
+    Args:
+        audio_file: Audio file (WAV, MP3, etc.)
+        
+    Returns:
+        {
+            "tamil_transcript": "Tamil transcription...",
+            "english_translation": "English translation...",
+            "success": true
+        }
+    """
+    try:
+        # Read file content
+        file_content = await audio_file.read()
+        file_extension = os.path.splitext(audio_file.filename)[1]
+        
+        # Configure transcription settings
+        config = {
+            "language_config": {
+                "languages": ["ta"],  # Tamil
+                "code_switching": True,
+            },
+            "diarization": False,
+            "translation": True,
+            "translation_config": {"target_languages": ["en"], "model": "base"},
+            "punctuation_enhanced": True
+        }
+        
+        async with httpx.AsyncClient(timeout=300) as client:
+            # Step 1: Upload audio to Gladia
+            headers = {
+                "x-gladia-key": GLADIA_API_KEY,
+                "accept": "application/json",
+            }
+            
+            files = [("audio", (audio_file.filename, file_content, f"audio/{file_extension[1:]}"))]
+            
+            upload_response: dict[str, Any] = (await client.post(
+                url=f"{GLADIA_API_URL}/v2/upload/",
+                headers=headers,
+                files=files
+            )).json()
+            
+            audio_url = upload_response.get("audio_url")
+            if not audio_url:
+                raise HTTPException(status_code=500, detail="Failed to upload audio file")
+            
+            # Step 2: Request transcription
+            data = {"audio_url": audio_url, **config}
+            headers["Content-Type"] = "application/json"
+            
+            post_response: dict[str, Any] = (await client.post(
+                url=f"{GLADIA_API_URL}/v2/pre-recorded/",
+                headers=headers,
+                json=data
+            )).json()
+            
+            result_url = post_response.get("result_url")
+            if not result_url:
+                raise HTTPException(status_code=500, detail="Failed to start transcription")
+            
+            # Step 3: Poll for results
+            max_attempts = 60  # 2 minutes max (60 * 2 seconds)
+            attempt = 0
+            
+            while attempt < max_attempts:
+                poll_response: dict[str, Any] = (await client.get(
+                    url=result_url, 
+                    headers=headers
+                )).json()
+                
+                if poll_response.get("status") == "done":
+                    response = poll_response.get("result")
+                    
+                    # Extract Tamil transcript
+                    tamil_transcript = ""
+                    if response and "transcription" in response:
+                        tamil_transcript = response["transcription"].get("full_transcript", "")
+                    
+                    # Extract English translation
+                    english_translation = ""
+                    if response and "translation" in response:
+                        translation = response["translation"]
+                        if translation.get("success") and translation.get("results"):
+                            english_translation = translation["results"][0].get("full_transcript", "")
+                    
+                    return {
+                        "success": True,
+                        "tamil_transcript": tamil_transcript,
+                        "english_translation": english_translation,
+                        "metadata": {
+                            "audio_duration": response.get("metadata", {}).get("audio_duration", 0),
+                            "transcription_time": response.get("metadata", {}).get("transcription_time", 0)
+                        }
+                    }
+                    
+                elif poll_response.get("status") == "error":
+                    raise HTTPException(
+                        status_code=500, 
+                        detail=f"Transcription failed: {poll_response.get('error', 'Unknown error')}"
+                    )
+                
+                # Wait before next poll
+                await asyncio.sleep(2)
+                attempt += 1
+            
+            # Timeout
+            raise HTTPException(status_code=408, detail="Transcription timeout")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Transcription error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Transcription failed: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn
