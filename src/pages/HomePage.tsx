@@ -2,8 +2,11 @@
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { MessageSquare, Users, CheckCircle } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 const HomePage: React.FC = () => {
+  const { t } = useTranslation();
+  
   return (
     <div className="flex flex-col">
       {/* Hero Section */}
@@ -49,9 +52,9 @@ const HomePage: React.FC = () => {
       </section> */}
       <section className="bg-bg-light-blue text-black py-16 px-4">
         <div className="container mx-auto max-w-4xl text-center">
-          <h1 className="text-3xl font-bold mb-6">Make your voice heard?</h1>
+          <h1 className="text-3xl font-bold mb-6">{t('home.title')}</h1>
           <p className="text-xl mb-8 opacity-90 max-w-2xl mx-auto">
-          Create petitions that matter, gather support from your community, and drive real change with Griev Ease.
+            {t('home.subtitle')}
           </p>
           <div className="flex flex-col sm:flex-row justify-center gap-4">
             <Link to="/petitions/create">
@@ -59,7 +62,7 @@ const HomePage: React.FC = () => {
                 variant="outline"
                 className="bg-primary-blue hover:bg-blue-600 text-white px-8 py-6 text-lg"
               >
-                Create a Petition
+                {t('home.createButton')}
               </Button>
             </Link>
             <Link to="/petitions">
@@ -67,7 +70,7 @@ const HomePage: React.FC = () => {
                 variant="outline"
                 className="border-primary-blue text-primary-blue hover:bg-blue-50 px-8 py-6 text-lg"
               >
-                Browse Petitions
+                {t('home.browseButton')}
               </Button>
             </Link>
           </div>
@@ -78,7 +81,7 @@ const HomePage: React.FC = () => {
       <section className="py-20 px-4">
         <div className="container mx-auto max-w-6xl">
           <h2 className="text-3xl font-bold text-center mb-12 text-gray-900">
-            How It Works
+            {t('home.howItWorks')}
           </h2>
           
           <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
@@ -87,9 +90,9 @@ const HomePage: React.FC = () => {
               <div className="bg-soft-blue p-4 rounded-full mb-6">
                 <MessageSquare size={32} className="text-primary-blue" />
               </div>
-              <h3 className="text-xl font-semibold mb-3">Create</h3>
+              <h3 className="text-xl font-semibold mb-3">{t('home.step1.title')}</h3>
               <p className="text-gray-600">
-                Create a detailed petition with our easy-to-use tools. Add text, photos, and location details to make your case clear.
+                {t('home.step1.description')}
               </p>
             </div>
             
@@ -98,9 +101,9 @@ const HomePage: React.FC = () => {
               <div className="bg-soft-blue p-4 rounded-full mb-6">
                 <Users size={32} className="text-primary-blue" />
               </div>
-              <h3 className="text-xl font-semibold mb-3">Gather Support</h3>
+              <h3 className="text-xl font-semibold mb-3">{t('home.step2.title')}</h3>
               <p className="text-gray-600">
-                Share your petition with your community, collect signatures, and build momentum for your cause.
+                {t('home.step2.description')}
               </p>
             </div>
             
@@ -109,9 +112,9 @@ const HomePage: React.FC = () => {
               <div className="bg-soft-blue p-4 rounded-full mb-6">
                 <CheckCircle size={32} className="text-primary-blue" />
               </div>
-              <h3 className="text-xl font-semibold mb-3">Create Change</h3>
+              <h3 className="text-xl font-semibold mb-3">{t('home.step3.title')}</h3>
               <p className="text-gray-600">
-                Your petition will be reviewed by the relevant authorities, with updates provided throughout the process.
+                {t('home.step3.description')}
               </p>
             </div>
           </div>

@@ -116,7 +116,7 @@ async def startup_event():
 # CORS configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:5173", "http://localhost:8080", "http://localhost:8081"],
+    allow_origins=["http://localhost:3000", "http://localhost:5173", "http://localhost:8080", "http://localhost:8081","http://localhost:1234"],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["*"],
@@ -1518,6 +1518,166 @@ def get_admin_petitions(
         print(f"Error fetching admin petitions: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch petitions: {str(e)}")
 
+@app.post("/admin/petitions/{petition_id}/verify-update")
+async def verify_admin_update(
+    petition_id: int,
+    admin_comment: str = Form(...),
+    proof_files: List[UploadFile] = File(default=[]),
+    current_admin: dict = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Verify admin update using LMStudio's Gemma-3-4b model
+    Checks if admin comment and proof files match the petition description
+    """
+    try:
+        # Get petition details
+        petition = db.query(Petition).filter(Petition.petition_id == petition_id).first()
+        if not petition:
+            raise HTTPException(status_code=404, detail="Petition not found")
+        
+        # Prepare proof file names for context
+        proof_file_names = []
+        if proof_files and proof_files[0].filename:
+            proof_file_names = [f.filename for f in proof_files if f.filename]
+        
+        # Build verification prompt for Gemma model
+        verification_prompt = f"""You are an AI assistant helping verify government petition status updates.
+
+PETITION DETAILS:
+Title: {petition.title}
+Description: {petition.description}
+Category: {petition.category}
+Department: {petition.department}
+Current Status: {petition.status}
+
+ADMIN UPDATE:
+Comment: {admin_comment}
+Proof Files Uploaded: {', '.join(proof_file_names) if proof_file_names else 'None'}
+
+TASK:
+Verify if the admin's update comment is relevant and appropriate for this petition. Check if:
+1. The admin comment addresses the petition's issue
+2. The comment provides meaningful update information
+3. The proof files (if any) seem relevant to the petition type
+4. The update appears professional and genuine
+
+Respond in JSON format with:
+{{
+    "is_valid": true/false,
+    "confidence": 0-100,
+    "reason": "Brief explanation of your verification decision",
+    "suggestions": "Any suggestions for improvement (if applicable)"
+}}
+
+Be strict but fair. Only mark as invalid if the update is clearly irrelevant, spam, or unprofessional."""
+
+        # Call LMStudio API (Gemma-3-4b model)
+        lmstudio_url = "http://localhost:1234/v1/chat/completions"
+        
+        payload = {
+            "model": "google/gemma-3-4b",
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "You are a helpful AI assistant that verifies government petition updates for accuracy and relevance. Always respond in valid JSON format."
+                },
+                {
+                    "role": "user",
+                    "content": verification_prompt
+                }
+            ],
+            "temperature": 0.3,
+            "max_tokens": 1000  # Increased from 500 to allow complete responses
+        }
+        
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            try:
+                response = await client.post(lmstudio_url, json=payload)
+                
+                if response.status_code != 200:
+                    # If LMStudio is not available, allow the update (fail-open approach)
+                    print(f"⚠️ LMStudio not available: {response.status_code}")
+                    print(f"   Response: {response.text}")
+                    return {
+                        "is_valid": True,
+                        "confidence": 50,
+                        "reason": "AI verification service unavailable - proceeding with manual review",
+                        "suggestions": "Please ensure your update is relevant to the petition",
+                        "ai_available": False
+                    }
+                
+                result = response.json()
+                ai_response = result['choices'][0]['message']['content']
+                
+                # Clean AI response - remove markdown code blocks if present
+                ai_response_cleaned = ai_response.strip()
+                if ai_response_cleaned.startswith('```'):
+                    # Remove markdown code blocks
+                    ai_response_cleaned = ai_response_cleaned.split('```')[1]
+                    if ai_response_cleaned.startswith('json'):
+                        ai_response_cleaned = ai_response_cleaned[4:]
+                    ai_response_cleaned = ai_response_cleaned.strip()
+                
+                # Parse AI response
+                try:
+                    verification_result = json.loads(ai_response_cleaned)
+                    verification_result["ai_available"] = True
+                    
+                    # Log verification result
+                    print(f"🤖 AI Verification Result for Petition #{petition_id}:")
+                    print(f"   Valid: {verification_result.get('is_valid')}")
+                    print(f"   Confidence: {verification_result.get('confidence')}%")
+                    print(f"   Reason: {verification_result.get('reason')}")
+                    
+                    return verification_result
+                    
+                except json.JSONDecodeError as json_err:
+                    # Log the parsing error for debugging
+                    print(f"⚠️ JSON Parse Error: {str(json_err)}")
+                    print(f"   AI Response (first 500 chars): {ai_response[:500]}")
+                    
+                    # If AI doesn't return valid JSON, extract key info
+                    is_valid = "valid" in ai_response.lower() and "invalid" not in ai_response.lower()
+                    return {
+                        "is_valid": is_valid,
+                        "confidence": 70,
+                        "reason": ai_response[:300],  # Increased from 200 to 300 chars
+                        "suggestions": "AI response was not in expected format - please review manually",
+                        "ai_available": True
+                    }
+                    
+            except httpx.RequestError as e:
+                print(f"⚠️ LMStudio request error: {str(e)}")
+                return {
+                    "is_valid": True,
+                    "confidence": 50,
+                    "reason": "AI verification service unavailable - proceeding with manual review",
+                    "suggestions": "Please ensure your update is relevant to the petition",
+                    "ai_available": False
+                }
+                
+    except httpx.TimeoutException:
+        print("⚠️ LMStudio timeout - allowing update")
+        return {
+            "is_valid": True,
+            "confidence": 50,
+            "reason": "AI verification timed out - proceeding with manual review",
+            "suggestions": "Please ensure your update is relevant to the petition",
+            "ai_available": False
+        }
+    except Exception as e:
+        print(f"❌ Verification error: {str(e)}")
+        # Fail-open: allow update if verification fails
+        return {
+            "is_valid": True,
+            "confidence": 50,
+            "reason": f"Verification service error - proceeding with manual review",
+            "suggestions": "Please ensure your update is relevant to the petition",
+            "ai_available": False
+        }
+
+
 @app.put("/admin/petitions/{petition_id}/status")
 async def update_petition_status(
     petition_id: int,
@@ -1981,7 +2141,7 @@ async def global_petitions_ws(websocket: WebSocket):
         try:
             global_connections.remove(websocket)
         except ValueError:
-            pass
+            pass     
         print("Global WS error:", e)
 
 # Helper function to notify user about petition updates

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
@@ -73,6 +74,7 @@ const formatDate = (dateString: string) => {
 const PetitionDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const { user, isAdmin } = useAuth();
   const [petition, setPetition] = useState<Petition | null>(null);
   const [loading, setLoading] = useState(true);
@@ -83,7 +85,21 @@ const PetitionDetailPage: React.FC = () => {
   const [proofFiles, setProofFiles] = useState<File[]>([]);
   const [updates, setUpdates] = useState<PetitionUpdate[]>([]);
   const [loadingUpdates, setLoadingUpdates] = useState(false);
+  const [verifying, setVerifying] = useState(false);
   const { toast } = useToast();
+
+  // Status display with translations
+  const getStatusDisplay = (status: string) => {
+    const statusMap: { [key: string]: string } = {
+      'submitted': t('petition.submitted'),
+      'under_review': t('petition.underReview'),
+      'in_progress': t('petition.inProgress'),
+      'resolved': t('petition.resolved'),
+      'rejected': t('petition.rejected'),
+      'escalated': t('petition.escalated')
+    };
+    return statusMap[status] || status;
+  };
 
   const fetchPetitionUpdates = async () => {
     if (!id) return;
@@ -197,8 +213,8 @@ const PetitionDetailPage: React.FC = () => {
                 fetchPetitionUpdates();
                 
                 toast({
-                  title: "Petition Updated",
-                  description: "This petition has been updated.",
+                  title: t('petition.petitionUpdated'),
+                  description: t('petition.petitionUpdatedDesc'),
                 });
               }
             }
@@ -233,8 +249,8 @@ const PetitionDetailPage: React.FC = () => {
               fetchPetitionUpdates();
               
               toast({
-                title: "Petition Updated",
-                description: "This petition has been updated.",
+                title: t('petition.petitionUpdated'),
+                description: t('petition.petitionUpdatedDesc'),
               });
             }
           }
@@ -273,14 +289,83 @@ const PetitionDetailPage: React.FC = () => {
   const handleUpdateStatus = async () => {
     if (!isAdmin || !petition || !newStatus) return;
     
-    setIsUpdating(true);
+    // Check if admin comment is provided
+    if (!adminComment.trim()) {
+      toast({
+        title: t('common.error'),
+        description: "Admin comment is required for verification",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    setVerifying(true);
     
     try {
+      // Step 1: Verify the update with AI
+      const verifyFormData = new FormData();
+      verifyFormData.append('admin_comment', adminComment.trim());
+      
+      // Add proof files for verification
+      proofFiles.forEach(file => {
+        verifyFormData.append('proof_files', file);
+      });
+
+      const verifyResponse = await fetch(`http://localhost:8000/admin/petitions/${petition.petition_id}/verify-update`, {
+        method: 'POST',
+        body: verifyFormData,
+        headers: {
+          'Authorization': `Bearer ${user?.token}`,
+        },
+      });
+
+      if (!verifyResponse.ok) {
+        throw new Error('Verification failed');
+      }
+
+      const verificationResult = await verifyResponse.json();
+      
+      console.log('🤖 AI Verification Result:', verificationResult);
+      
+      // Show verification result to admin
+      if (!verificationResult.is_valid) {
+        // AI determined the update is invalid
+        toast({
+          title: "❌ Verification Failed",
+          description: verificationResult.reason || "The update doesn't seem relevant to this petition",
+          variant: "destructive",
+        });
+        
+        // Show suggestions if available
+        if (verificationResult.suggestions) {
+          setTimeout(() => {
+            toast({
+              title: "💡 Suggestions",
+              description: verificationResult.suggestions,
+            });
+          }, 2000);
+        }
+        
+        setVerifying(false);
+        return; // Stop here - don't submit the update
+      }
+      
+      // AI approved - proceed directly without confirmation
+      // Show success toast for AI verification
+      if (verificationResult.ai_available) {
+        toast({
+          title: "✅ AI Verification Passed",
+          description: `Confidence: ${verificationResult.confidence}% - ${verificationResult.reason}`,
+        });
+      }
+      
+      setVerifying(false);
+      setIsUpdating(true);
+      
+      // Step 2: If verified, proceed with actual update
       const formData = new FormData();
       formData.append('status', newStatus);
-      if (adminComment.trim()) {
-        formData.append('admin_comment', adminComment.trim());
-      }
+      formData.append('admin_comment', adminComment.trim());
 
       // Add proof files
       proofFiles.forEach(file => {
@@ -310,17 +395,18 @@ const PetitionDetailPage: React.FC = () => {
       fetchPetitionUpdates();
       
       toast({
-        title: "Status updated",
-        description: `Petition status has been updated to ${STATUS_DISPLAY[newStatus as keyof typeof STATUS_DISPLAY]}. ${result.files_uploaded} proof files uploaded.`,
+        title: t('petition.statusUpdatedTitle'),
+        description: `${t('petition.statusUpdatedDesc')} ${getStatusDisplay(newStatus)}. ${result.files_uploaded} ${t('petition.filesUploaded')}`,
       });
     } catch (error) {
       console.error('Error updating status:', error);
       toast({
-        title: "Error",
-        description: "Failed to update petition status",
+        title: t('common.error'),
+        description: t('petition.updateError'),
         variant: "destructive",
       });
     } finally {
+      setVerifying(false);
       setIsUpdating(false);
     }
   };
@@ -330,7 +416,7 @@ const PetitionDetailPage: React.FC = () => {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-blue mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading petition details...</p>
+          <p className="text-gray-600">{t('petition.loadingDetails')}</p>
         </div>
       </div>
     );
@@ -340,13 +426,13 @@ const PetitionDetailPage: React.FC = () => {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">Error Loading Petition</h2>
-          <p className="text-gray-600">{error || "Petition not found"}</p>
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">{t('petition.errorLoading')}</h2>
+          <p className="text-gray-600">{error || t('petition.petitionNotFound')}</p>
           <Button
             onClick={() => navigate('/petitions/my')}
             className="mt-4 bg-primary-blue hover:bg-blue-600"
           >
-            Back to My Petitions
+            {t('petition.back')}
           </Button>
         </div>
       </div>
@@ -362,7 +448,7 @@ const PetitionDetailPage: React.FC = () => {
             <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6">
                 <Badge className={`${STATUS_COLORS[petition.status as keyof typeof STATUS_COLORS]} font-normal text-base px-3 py-1 mb-4 sm:mb-0`}>
-                  {STATUS_DISPLAY[petition.status as keyof typeof STATUS_DISPLAY]}
+                  {getStatusDisplay(petition.status)}
                 </Badge>
                 <div className="flex space-x-2">
                   {!isAdmin && (
@@ -373,7 +459,7 @@ const PetitionDetailPage: React.FC = () => {
                       className="border-primary-blue text-primary-blue"
                     >
                       <Edit className="h-4 w-4 mr-2" />
-                      Edit
+                      {t('petition.edit')}
                     </Button>
                   )}
                   <Button
@@ -382,14 +468,14 @@ const PetitionDetailPage: React.FC = () => {
                     onClick={() => {
                       navigator.clipboard.writeText(window.location.href);
                       toast({
-                        title: "Link copied",
-                        description: "Petition link has been copied to clipboard",
+                        title: t('petition.linkCopied'),
+                        description: t('petition.linkCopiedDesc'),
                       });
                     }}
                     className="border-primary-blue text-primary-blue"
                   >
                     <Share className="h-4 w-4 mr-2" />
-                    Share
+                    {t('petition.share')}
                   </Button>
                 </div>
               </div>
@@ -397,37 +483,37 @@ const PetitionDetailPage: React.FC = () => {
               {/* Admin Actions */}
               {isAdmin && (
                 <div className="bg-gray-50 p-6 rounded-lg mb-6">
-                  <h3 className="text-lg font-semibold mb-4">Admin Actions</h3>
+                  <h3 className="text-lg font-semibold mb-4">{t('petition.adminActions')}</h3>
                   <div className="space-y-4">
                     <div>
-                      <Label className="text-sm font-medium">Update Status</Label>
+                      <Label className="text-sm font-medium">{t('petition.updateStatus')}</Label>
                       <Select value={newStatus} onValueChange={setNewStatus}>
                         <SelectTrigger className="w-full mt-2">
-                          <SelectValue placeholder="Select new status" />
+                          <SelectValue placeholder={t('petition.selectNewStatus')} />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="submitted">Submitted</SelectItem>
-                          <SelectItem value="under_review">Under Review</SelectItem>
-                          <SelectItem value="in_progress">In Progress</SelectItem>
-                          <SelectItem value="resolved">Resolved</SelectItem>
-                          <SelectItem value="rejected">Rejected</SelectItem>
-                          <SelectItem value="escalated">Escalated</SelectItem>
+                          <SelectItem value="submitted">{t('petition.submitted')}</SelectItem>
+                          <SelectItem value="under_review">{t('petition.underReview')}</SelectItem>
+                          <SelectItem value="in_progress">{t('petition.inProgress')}</SelectItem>
+                          <SelectItem value="resolved">{t('petition.resolved')}</SelectItem>
+                          <SelectItem value="rejected">{t('petition.rejected')}</SelectItem>
+                          <SelectItem value="escalated">{t('petition.escalated')}</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
                     
                     <div>
-                      <Label className="text-sm font-medium">Admin Comment</Label>
+                      <Label className="text-sm font-medium">{t('petition.adminComment')}</Label>
                       <Textarea
                         value={adminComment}
                         onChange={(e) => setAdminComment(e.target.value)}
-                        placeholder="Describe what actions you have taken or what needs to be done..."
+                        placeholder={t('petition.adminCommentPlaceholder')}
                         className="min-h-[100px] mt-2"
                       />
                     </div>
 
                     <div>
-                      <Label className="text-sm font-medium">Upload Proof Files</Label>
+                      <Label className="text-sm font-medium">{t('petition.uploadProofFiles')}</Label>
                       <div className="mt-2">
                         <Input
                           type="file"
@@ -437,13 +523,13 @@ const PetitionDetailPage: React.FC = () => {
                           className="mb-2"
                         />
                         <p className="text-xs text-gray-500 mb-3">
-                          Upload images, documents, or other proof files to show what actions have been taken.
+                          {t('petition.uploadProofHelper')}
                         </p>
                         
                         {/* Selected files preview */}
                         {proofFiles.length > 0 && (
                           <div className="space-y-2">
-                            <p className="text-sm font-medium">Selected Files:</p>
+                            <p className="text-sm font-medium">{t('petition.selectedFiles')}</p>
                             <div className="flex flex-wrap gap-2">
                               {proofFiles.map((file, index) => (
                                 <div key={index} className="flex items-center bg-blue-50 rounded-lg px-3 py-2 text-sm">
@@ -468,11 +554,16 @@ const PetitionDetailPage: React.FC = () => {
 
                     <Button
                       onClick={handleUpdateStatus}
-                      disabled={!newStatus || isUpdating || (!adminComment.trim() && proofFiles.length === 0 && newStatus === petition.status)}
+                      disabled={!newStatus || isUpdating || verifying || !adminComment.trim()}
                       className="bg-primary-blue hover:bg-blue-700 w-full"
                     >
                       <Upload className="h-4 w-4 mr-2" />
-                      {isUpdating ? 'Updating...' : (newStatus === petition.status ? 'Add Update' : 'Update Status & Upload Proof')}
+                      {verifying 
+                        ? '🤖 Verifying with AI...' 
+                        : isUpdating 
+                        ? t('petition.updating') 
+                        : (newStatus === petition.status ? t('petition.addUpdate') : t('petition.updateStatusAndProof'))
+                      }
                     </Button>
                   </div>
                 </div>
@@ -484,37 +575,37 @@ const PetitionDetailPage: React.FC = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                 <div className="flex items-center text-gray-600">
                   <MapPin className="h-5 w-5 mr-2" />
-                  <span>{petition.location || 'No location specified'}</span>
+                  <span>{petition.location || t('petition.noLocation')}</span>
                 </div>
                 <div className="flex items-center text-gray-600">
                   <Calendar className="h-5 w-5 mr-2" />
-                  <span>Submitted on {formatDate(petition.submitted_at)}</span>
+                  <span>{t('petition.submittedAt')} {formatDate(petition.submitted_at)}</span>
                 </div>
                 <div className="flex items-center text-gray-600">
                   <AlertTriangle className="h-5 w-5 mr-2" />
-                  <span>Urgency: {petition.urgency_level}</span>
+                  <span>{t('petition.urgencyLabel')}: {petition.urgency_level}</span>
                 </div>
                 <div className="flex items-center text-gray-600">
                   <CheckCircle className="h-5 w-5 mr-2" />
-                  <span>Department: {petition.department}</span>
+                  <span>{t('petition.department')}: {petition.department}</span>
                 </div>
                 {/* Show user info for admins */}
                 {isAdmin && petition.user_name && (
                   <div className="flex items-center text-gray-600">
                     <User className="h-5 w-5 mr-2" />
-                    <span>Submitted by: {petition.user_name}</span>
+                    <span>{t('petition.submittedBy')}: {petition.user_name}</span>
                   </div>
                 )}
               </div>
 
               <div className="prose max-w-none mb-6">
-                <h2 className="text-xl font-semibold mb-4">Detailed Description</h2>
+                <h2 className="text-xl font-semibold mb-4">{t('petition.detailedDescription')}</h2>
                 <p className="whitespace-pre-wrap">{petition.description}</p>
               </div>
 
               {petition.proof_files && petition.proof_files.length > 0 && (
                 <div className="mb-6">
-                  <h2 className="text-xl font-semibold mb-4">Proof Files</h2>
+                  <h2 className="text-xl font-semibold mb-4">{t('petition.proofFiles')}</h2>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                     {petition.proof_files.map((file, index) => (
                       <a
@@ -540,25 +631,25 @@ const PetitionDetailPage: React.FC = () => {
           {/* Right Column - Status and Updates */}
           <div className="lg:col-span-1">
             <Card className="p-6 mb-6">
-              <h2 className="text-xl font-semibold mb-4">Petition Status</h2>
+              <h2 className="text-xl font-semibold mb-4">{t('petition.status')}</h2>
               <div className="space-y-4">
                 <div>
-                  <p className="text-sm text-gray-600">Category</p>
+                  <p className="text-sm text-gray-600">{t('petition.category')}</p>
                   <p className="font-medium">{petition.category}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600">Due Date</p>
+                  <p className="text-sm text-gray-600">{t('petition.dueDate')}</p>
                   <p className="font-medium">{formatDate(petition.due_date)}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600">Current Status</p>
+                  <p className="text-sm text-gray-600">{t('petition.currentStatus')}</p>
                   <Badge className={`${STATUS_COLORS[petition.status as keyof typeof STATUS_COLORS]} font-normal`}>
-                    {STATUS_DISPLAY[petition.status as keyof typeof STATUS_DISPLAY]}
+                    {getStatusDisplay(petition.status)}
                   </Badge>
                 </div>
                 {isAdmin && petition.user_email && (
                   <div>
-                    <p className="text-sm text-gray-600">User Email</p>
+                    <p className="text-sm text-gray-600">{t('petition.userEmail')}</p>
                     <p className="font-medium">{petition.user_email}</p>
                   </div>
                 )}
@@ -568,12 +659,12 @@ const PetitionDetailPage: React.FC = () => {
             {/* Updates History - Visible to all users for transparency */}
             <Card className="p-6 mb-6">
               <h2 className="text-lg font-semibold mb-4">
-                {isAdmin ? "Updates History" : "Status Updates"}
+                {isAdmin ? t('petition.updatesHistory') : t('petition.statusUpdates')}
               </h2>
               {loadingUpdates ? (
                 <div className="text-center py-4">
                   <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-blue-600 mx-auto"></div>
-                  <p className="text-sm text-gray-500 mt-2">Loading updates...</p>
+                  <p className="text-sm text-gray-500 mt-2">{t('petition.loadingUpdates')}</p>
                 </div>
               ) : updates.length > 0 ? (
                 <div className="space-y-4">
@@ -581,7 +672,7 @@ const PetitionDetailPage: React.FC = () => {
                     <div key={update.update_id} className="border-l-2 border-blue-200 pl-4 pb-4">
                       <div className="flex items-start justify-between mb-2">
                         <Badge className="bg-blue-100 text-blue-800 text-xs">
-                          {STATUS_DISPLAY[update.status as keyof typeof STATUS_DISPLAY]}
+                          {getStatusDisplay(update.status)}
                         </Badge>
                         <span className="text-xs text-gray-500">
                           {formatDate(update.updated_at)}
@@ -598,7 +689,7 @@ const PetitionDetailPage: React.FC = () => {
                       {update.proof_files && update.proof_files.length > 0 && (
                         <div className="mt-2">
                           <p className="text-xs text-gray-600 mb-1">
-                            {isAdmin ? "Attached files:" : "Evidence:"}
+                            {isAdmin ? t('petition.attachedFiles') : t('petition.evidence')}:
                           </p>
                           <div className="flex flex-wrap gap-1">
                             {update.proof_files.map((file, fileIndex) => (
@@ -621,7 +712,7 @@ const PetitionDetailPage: React.FC = () => {
                 </div>
               ) : (
                 <p className="text-sm text-gray-500 text-center py-4">
-                  {isAdmin ? "No updates recorded yet." : "No status updates available yet."}
+                  {isAdmin ? t('petition.noUpdatesRecorded') : t('petition.noStatusUpdates')}
                 </p>
               )}
             </Card>
@@ -631,15 +722,15 @@ const PetitionDetailPage: React.FC = () => {
               <Card className="p-6 mb-6">
                 <div className="flex items-center mb-4">
                   <Shield className="h-5 w-5 mr-2 text-blue-600" />
-                  <h2 className="text-lg font-semibold">Admin View</h2>
+                  <h2 className="text-lg font-semibold">{t('petition.adminView')}</h2>
                 </div>
                 <p className="text-sm text-gray-600 mb-4">
-                  You have administrative privileges for this petition. You can update the status and add internal comments.
+                  {t('petition.adminPrivileges')}
                 </p>
                 <div className="space-y-2">
                   <div className="flex items-center text-sm">
                     <Clock className="h-4 w-4 mr-2" />
-                    <span>Last updated: {formatDate(petition.submitted_at)}</span>
+                    <span>{t('petition.lastUpdated')}: {formatDate(petition.submitted_at)}</span>
                   </div>
                 </div>
               </Card>

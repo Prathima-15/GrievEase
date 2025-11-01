@@ -14,6 +14,7 @@ import {
   InputOTPSlot
 } from "@/components/ui/input-otp";
 import { useToast } from '@/hooks/use-toast';
+import { useTranslation } from 'react-i18next';
 
 interface SignInPageProps {
   isAdmin?: boolean;
@@ -33,6 +34,7 @@ const SignInPage: React.FC<SignInPageProps> = ({ isAdmin = false }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const { toast } = useToast();
+  const { t } = useTranslation();
   
   // Detect if we're on the admin route
   const isAdminRoute = isAdmin || location.pathname.includes('/admin');
@@ -178,19 +180,19 @@ const SignInPage: React.FC<SignInPageProps> = ({ isAdmin = false }) => {
       <div className="w-full max-w-md bg-white rounded-lg shadow-lg p-8 border border-blue-border">
         <div className="flex flex-col items-center mb-8">
           <Logo className="mb-6" />
-          <h1 className="text-2xl font-bold text-gray-900">Welcome Back</h1>
-          <p className="text-gray-600 mt-2">Sign in to continue to Grieve Ease</p>
+          <h1 className="text-2xl font-bold text-gray-900">{t('auth.welcome')}</h1>
+          <p className="text-gray-600 mt-2">{t('auth.signIn')}</p>
         </div>
         
         <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
           <TabsList className="grid grid-cols-2 mb-6">
             <TabsTrigger value="phone" className="flex items-center gap-2">
               <Phone className="h-4 w-4" />
-              Phone
+              {t('auth.phoneNumber')}
             </TabsTrigger>
             <TabsTrigger value="email" className="flex items-center gap-2">
               <Mail className="h-4 w-4" />
-              Email
+              {t('auth.email')}
             </TabsTrigger>
           </TabsList>
           
@@ -198,12 +200,12 @@ const SignInPage: React.FC<SignInPageProps> = ({ isAdmin = false }) => {
             {/* Phone Number Input */}
             <div className="space-y-2">
               <label htmlFor="phone" className="block text-sm font-medium text-gray-700">
-                Mobile Number
+                {t('auth.phoneNumber')}
               </label>
               <Input
                 id="phone"
                 type="tel"
-                placeholder="Mobile number"
+                placeholder={t('auth.phoneNumber')}
                 value={phone}
                 onChange={(e) => setPhone(formatPhoneNumber(e.target.value))}
                 className="w-full"
@@ -216,16 +218,16 @@ const SignInPage: React.FC<SignInPageProps> = ({ isAdmin = false }) => {
             <div className="space-y-2">
               <div className="flex justify-between items-center">
                 <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-                  Password
+                  {t('auth.password')}
                 </label>
                 <Link to="/forgot-password" className="text-xs text-primary-blue hover:underline">
-                  Forgot password?
+                  {t('auth.forgotPassword')}
                 </Link>
               </div>
               <Input
                 id="password"
                 type={showPassword ? "text" : "password"}
-                placeholder="Password"
+                placeholder={t('auth.password')}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full"
@@ -265,12 +267,12 @@ const SignInPage: React.FC<SignInPageProps> = ({ isAdmin = false }) => {
             {/* Email Input */}
             <div className="space-y-2">
               <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-                Email
+                {t('auth.email')}
               </label>
               <Input
                 id="email"
                 type="email"
-                placeholder="Email"
+                placeholder={t('auth.email')}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full"
@@ -335,7 +337,7 @@ const SignInPage: React.FC<SignInPageProps> = ({ isAdmin = false }) => {
               disabled={otp.length < 6 || isSubmitting}
               className="w-full bg-primary-blue hover:bg-blue-600"
             >
-              {isSubmitting ? "Verifying..." : "Verify OTP"}
+              {isSubmitting ? t('auth.signingIn') : "Verify OTP"}
             </Button>
           ) : (
             <Button
@@ -348,16 +350,16 @@ const SignInPage: React.FC<SignInPageProps> = ({ isAdmin = false }) => {
               }
               className="w-full bg-primary-blue hover:bg-blue-600"
             >
-              {isSubmitting ? "Processing..." : "Sign In"}
+              {isSubmitting ? t('auth.signingIn') : t('auth.signIn')}
             </Button>
           )}
         </div>
         
         <div className="mt-8 text-center">
           <p className="text-sm text-gray-600">
-            Don't have an account?{" "}
+            {t('auth.noAccount')}{" "}
             <Link to="/sign-up" className="text-primary-blue hover:underline font-medium">
-              Sign up
+              {t('auth.signUpLink')}
             </Link>
           </p>
         </div>

@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
+import { useTranslation } from 'react-i18next';
 
 // API Types
 interface Petition {
@@ -60,6 +61,7 @@ const ALL_STATUSES = ['submitted', 'under_review', 'in_progress', 'resolved', 'r
 const BrowsePetitionsPage: React.FC = () => {
   const { toast } = useToast();
   const { user } = useAuth();
+  const { t } = useTranslation();
   
   // State
   const [petitions, setPetitions] = useState<Petition[]>([]);
@@ -189,7 +191,7 @@ const BrowsePetitionsPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="container mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold mb-6">Browse Petitions</h1>
+        <h1 className="text-3xl font-bold mb-6">{t('browse.title')}</h1>
         
         <div className="flex flex-col lg:flex-row gap-6">
           {/* Mobile filter toggle */}
@@ -207,11 +209,11 @@ const BrowsePetitionsPage: React.FC = () => {
           {/* Left Sidebar - Filters */}
           <div className={`lg:w-1/4 ${isFilterOpen || window.innerWidth >= 1024 ? 'block' : 'hidden'}`}>
             <div className="bg-white rounded-lg shadow p-6 sticky top-24">
-              <h2 className="font-semibold text-lg mb-4">Filters</h2>
+              <h2 className="font-semibold text-lg mb-4">{t('browse.filters')}</h2>
               
               {/* Status Filter */}
               <div className="mb-6">
-                <h3 className="font-medium text-gray-900 mb-3">Status</h3>
+                <h3 className="font-medium text-gray-900 mb-3">{t('browse.status')}</h3>
                 <div className="space-y-2">
                   {ALL_STATUSES.map(status => (
                     <div key={status} className="flex items-center">
@@ -243,7 +245,7 @@ const BrowsePetitionsPage: React.FC = () => {
                 <div className="relative">
                   <Input
                     type="text"
-                    placeholder="Search petitions..."
+                    placeholder={t('browse.searchPlaceholder')}
                     className="w-full pl-10 pr-4"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
@@ -258,22 +260,22 @@ const BrowsePetitionsPage: React.FC = () => {
                   onChange={(e) => setSortBy(e.target.value)}
                   className="w-full rounded-md border border-blue-border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-blue focus:border-transparent"
                 >
-                  <option value="newest">Newest</option>
-                  <option value="oldest">Oldest</option>
-                  <option value="most-signatures">Most Signatures</option>
+                  <option value="newest">{t('browse.newest')}</option>
+                  <option value="oldest">{t('browse.oldest')}</option>
+                  <option value="most-signatures">{t('browse.mostSignatures')}</option>
                 </select>
               </div>
             </div>
             
             {/* Results Count */}
             <p className="text-sm text-gray-600 mb-4">
-              {loading ? 'Loading...' : `Showing ${petitions.length} of ${totalCount} results`}
+              {loading ? t('common.loading') : `Showing ${petitions.length} of ${totalCount} results`}
             </p>
             
             {/* Petition Cards */}
             {loading ? (
               <div className="text-center py-12 bg-white rounded-lg shadow">
-                <p className="text-gray-600">Loading petitions...</p>
+                <p className="text-gray-600">{t('browse.loading')}</p>
               </div>
             ) : petitions.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
@@ -337,9 +339,9 @@ const BrowsePetitionsPage: React.FC = () => {
               </div>
             ) : (
               <div className="text-center py-12 bg-white rounded-lg shadow">
-                <h3 className="text-lg font-medium text-gray-900 mb-2">No petitions found</h3>
+                <h3 className="text-lg font-medium text-gray-900 mb-2">{t('browse.noPetitions')}</h3>
                 <p className="text-gray-600 mb-6">
-                  Try adjusting your filters or search query.
+                  {t('browse.tryAdjusting')}
                 </p>
                 <Button
                   onClick={() => {

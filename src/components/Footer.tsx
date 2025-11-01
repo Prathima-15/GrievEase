@@ -1,8 +1,11 @@
 
 import { Link } from 'react-router-dom';
 import Logo from './Logo';
+import { useTranslation } from 'react-i18next';
 
 const Footer: React.FC = () => {
+  const { t } = useTranslation();
+  
   return (
     <footer className="bg-gray-50 border-t border-gray-200">
       <div className="container mx-auto px-4 py-12">
@@ -10,15 +13,15 @@ const Footer: React.FC = () => {
           <div className="col-span-1 md:col-span-2">
             <Logo className="mb-4" />
             <p className="text-gray-600 mb-4 max-w-md">
-              Griev Ease is a platform that helps citizens create and submit grievance petitions to the appropriate authorities.
+              {t('footer.aboutText')}
             </p>
             <p className="text-sm text-gray-500">
-              © {new Date().getFullYear()} Griev Ease. All rights reserved.
+              © {new Date().getFullYear()} GrievEase. {t('footer.allRightsReserved')}
             </p>
           </div>
           
           <div className="col-span-1">
-            <h3 className="font-medium text-gray-900 mb-4">Resources</h3>
+            <h3 className="font-medium text-gray-900 mb-4">{t('footer.quickLinks')}</h3>
             <ul className="space-y-3">
               <li>
                 <Link to="/help" className="text-gray-600 hover:text-primary-blue transition-colors">
@@ -37,7 +40,7 @@ const Footer: React.FC = () => {
               </li>
               <li>
                 <Link to="/contact" className="text-gray-600 hover:text-primary-blue transition-colors">
-                  Contact Us
+                  {t('footer.contact')}
                 </Link>
               </li>
             </ul>
@@ -48,12 +51,12 @@ const Footer: React.FC = () => {
             <ul className="space-y-3">
               <li>
                 <Link to="/terms" className="text-gray-600 hover:text-primary-blue transition-colors">
-                  Terms of Service
+                  {t('footer.termsOfService')}
                 </Link>
               </li>
               <li>
                 <Link to="/privacy" className="text-gray-600 hover:text-primary-blue transition-colors">
-                  Privacy Policy
+                  {t('footer.privacyPolicy')}
                 </Link>
               </li>
               <li>

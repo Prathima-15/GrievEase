@@ -1,16 +1,24 @@
 
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Menu, X, Search } from 'lucide-react';
+import { Menu, X, Search, Globe } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import Logo from './Logo';
 import { useAuth } from '@/contexts/AuthContext';
+import { useTranslation } from 'react-i18next';
 
 const Header: React.FC = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const { isAuthenticated, isAdmin, user, signOut } = useAuth();
   const navigate = useNavigate();
+  const { t, i18n } = useTranslation();
+
+  const changeLanguage = (lng: string) => {
+    i18n.changeLanguage(lng);
+    localStorage.setItem('language', lng);
+  };
 
   const handleSignOut = () => {
     signOut();
@@ -25,20 +33,20 @@ const Header: React.FC = () => {
   };
 
   const commonNavItems = [
-    { to: '/', label: 'Home' },
-    { to: '/petitions', label: 'Browse Petitions' },
-    { to: '/about', label: 'About' },
+    { to: '/', label: t('nav.home') },
+    { to: '/petitions', label: t('nav.browse') },
+    { to: '/about', label: t('nav.about') },
   ];
 
   const userNavItems = isAuthenticated && !isAdmin
     ? [
-        { to: '/petitions/create', label: 'Create Petition' },
-        { to: '/petitions/my-petitions', label: 'My Petitions' },
+        { to: '/petitions/create', label: t('nav.createPetition') },
+        { to: '/petitions/my-petitions', label: t('nav.myPetitions') },
       ]
     : [];
 
   const adminNavItems = isAdmin
-    ? [{ to: '/dashboard', label: 'Dashboard' }]
+    ? [{ to: '/dashboard', label: t('nav.adminDashboard') }]
     : [];
 
   const navItems = [...commonNavItems, ...userNavItems, ...adminNavItems];
@@ -72,7 +80,7 @@ const Header: React.FC = () => {
             <form onSubmit={handleSearch} className="relative">
               <input
                 type="text"
-                placeholder="Search petitions..."
+                placeholder={t('browse.searchPlaceholder')}
                 className="py-2 pl-10 pr-4 rounded-full border border-blue-border focus:outline-none focus:ring-2 focus:ring-primary-blue focus:border-transparent"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -80,13 +88,25 @@ const Header: React.FC = () => {
               <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
             </form>
             
+            {/* Language Selector */}
+            <Select value={i18n.language} onValueChange={changeLanguage}>
+              <SelectTrigger className="w-[140px] border-blue-border">
+                <Globe className="h-4 w-4 mr-2" />
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="en">English</SelectItem>
+                <SelectItem value="ta">தமிழ் (Tamil)</SelectItem>
+              </SelectContent>
+            </Select>
+            
             {isAuthenticated ? (
               <div className="flex items-center space-x-4">
                 <span className="text-sm font-medium">
                   Hi, {user?.firstName}
                 </span>
                 <Button variant="outline" onClick={handleSignOut}>
-                  Sign Out
+                  {t('nav.signOut')}
                 </Button>
               </div>
             ) : (
@@ -95,7 +115,7 @@ const Header: React.FC = () => {
                   variant="default"
                   className="bg-primary-blue hover:bg-blue-600 text-white"
                 >
-                  Sign In
+                  {t('nav.signIn')}
                 </Button>
               </Link>
             )}
@@ -122,7 +142,7 @@ const Header: React.FC = () => {
             <div className="relative">
               <input
                 type="text"
-                placeholder="Search petitions..."
+                placeholder={t('browse.searchPlaceholder')}
                 className="w-full py-2 pl-10 pr-4 rounded-full border border-blue-border focus:outline-none focus:ring-2 focus:ring-primary-blue focus:border-transparent"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -130,6 +150,23 @@ const Header: React.FC = () => {
               <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
             </div>
           </form>
+          
+          {/* Mobile Language Selector */}
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
+              <Globe className="h-4 w-4 mr-2" />
+              Language / மொழி
+            </label>
+            <Select value={i18n.language} onValueChange={changeLanguage}>
+              <SelectTrigger className="w-full border-blue-border">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="en">English</SelectItem>
+                <SelectItem value="ta">தமிழ் (Tamil)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           
           <ul className="space-y-4">
             {navItems.map((item) => (
@@ -152,7 +189,7 @@ const Header: React.FC = () => {
                   Hi, {user?.firstName}
                 </span>
                 <Button variant="outline" onClick={handleSignOut} className="w-full">
-                  Sign Out
+                  {t('nav.signOut')}
                 </Button>
               </div>
             ) : (
@@ -161,7 +198,7 @@ const Header: React.FC = () => {
                   variant="default"
                   className="w-full bg-primary-blue hover:bg-blue-600 text-white"
                 >
-                  Sign In
+                  {t('nav.signIn')}
                 </Button>
               </Link>
             )}
