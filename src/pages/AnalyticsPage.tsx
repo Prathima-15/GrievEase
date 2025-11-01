@@ -58,6 +58,7 @@ const AnalyticsPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [dateRange, setDateRange] = useState('last30days');
   const [selectedDepartment, setSelectedDepartment] = useState('all');
+  const [departments, setDepartments] = useState<Array<{ id: number; name: string }>>([]);
 
   useEffect(() => {
     if (!isAdmin) {
@@ -69,8 +70,21 @@ const AnalyticsPage: React.FC = () => {
       return;
     }
 
+    fetchDepartments();
     fetchAnalytics();
   }, [isAdmin, dateRange, selectedDepartment]);
+
+  const fetchDepartments = async () => {
+    try {
+      const response = await fetch('http://localhost:8000/departments');
+      if (response.ok) {
+        const data = await response.json();
+        setDepartments(data);
+      }
+    } catch (error) {
+      console.error('Error fetching departments:', error);
+    }
+  };
 
   const fetchAnalytics = async () => {
     setLoading(true);
@@ -91,19 +105,37 @@ const AnalyticsPage: React.FC = () => {
       console.log('Analytics data received:', data);
       
       // Transform and structure data for charts
+      // Build status distribution from actual status_counts
+      const statusDistribution = [];
+      const statusColorMap: Record<string, string> = {
+        'submitted': '#0088FE',
+        'under_review': '#00C49F',
+        'in_progress': '#FFBB28',
+        'resolved': '#82ca9d',
+        'rejected': '#FF8042',
+        'escalated': '#8884D8'
+      };
+
+      for (const [status, count] of Object.entries(data.status_counts || {})) {
+        const numCount = typeof count === 'number' ? count : 0;
+        if (numCount > 0) {
+          statusDistribution.push({
+            status: status.split('_').map((word: string) => 
+              word.charAt(0).toUpperCase() + word.slice(1)
+            ).join(' '),
+            count: numCount,
+            color: statusColorMap[status] || '#8884D8'
+          });
+        }
+      }
+
       const transformedData: AnalyticsData = {
         totalPetitions: data.total_petitions || 0,
         totalUsers: data.total_users || 0,
         resolvedPetitions: data.resolved_petitions || 0,
         pendingPetitions: data.pending_petitions || 0,
         averageResolutionTime: data.average_resolution_time || 0,
-        statusDistribution: [
-          { status: 'Submitted', count: data.status_counts?.submitted || 0, color: '#0088FE' },
-          { status: 'Under Review', count: data.status_counts?.under_review || 0, color: '#00C49F' },
-          { status: 'In Progress', count: data.status_counts?.in_progress || 0, color: '#FFBB28' },
-          { status: 'Resolved', count: data.status_counts?.resolved || 0, color: '#00C49F' },
-          { status: 'Rejected', count: data.status_counts?.rejected || 0, color: '#FF8042' }
-        ],
+        statusDistribution: statusDistribution,
         departmentStats: data.department_stats || [],
         monthlyTrends: data.monthly_trends || [],
         urgencyDistribution: data.urgency_distribution || [],
@@ -211,6 +243,19 @@ const AnalyticsPage: React.FC = () => {
                 <SelectItem value="lastyear">Last year</SelectItem>
               </SelectContent>
             </Select>
+            <Select value={selectedDepartment} onValueChange={setSelectedDepartment}>
+              <SelectTrigger className="w-48">
+                <SelectValue placeholder="Select department" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Departments</SelectItem>
+                {departments.map((dept) => (
+                  <SelectItem key={dept.id} value={dept.name}>
+                    {dept.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Button onClick={exportReport} variant="outline">
               <Download className="h-4 w-4 mr-2" />
               Export Report
@@ -282,39 +327,60 @@ const AnalyticsPage: React.FC = () => {
               {/* Status Distribution */}
               <Card className="p-6">
                 <h3 className="text-lg font-semibold mb-4">Status Distribution</h3>
-                <ResponsiveContainer width="100%" height={300}>
-                  <PieChart>
-                    <Pie
-                      data={analytics.statusDistribution}
-                      cx="50%"
-                      cy="50%"
-                      labelLine={false}
-                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                      outerRadius={80}
-                      fill="#8884d8"
-                      dataKey="count"
-                    >
-                      {analytics.statusDistribution.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                  </PieChart>
-                </ResponsiveContainer>
+                {analytics.statusDistribution.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <PieChart>
+                      <Pie
+                        data={analytics.statusDistribution}
+                        cx="50%"
+                        cy="50%"
+                        labelLine={false}
+                        label={({ status, percent }) => `${status} ${(percent * 100).toFixed(0)}%`}
+                        outerRadius={80}
+                        fill="#8884d8"
+                        dataKey="count"
+                        nameKey="status"
+                      >
+                        {analytics.statusDistribution.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-[300px] flex items-center justify-center">
+                    <div className="text-center">
+                      <FileText className="h-12 w-12 mx-auto text-gray-400 mb-4" />
+                      <p className="text-gray-600">No petition data available</p>
+                      <p className="text-sm text-gray-500 mt-2">Petitions will appear here once submitted</p>
+                    </div>
+                  </div>
+                )}
               </Card>
 
               {/* Urgency Distribution */}
               <Card className="p-6">
                 <h3 className="text-lg font-semibold mb-4">Urgency Levels</h3>
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={analytics.urgencyDistribution}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="urgency" />
-                    <YAxis />
-                    <Tooltip />
-                    <Bar dataKey="count" fill="#8884d8" />
-                  </BarChart>
-                </ResponsiveContainer>
+                {analytics.urgencyDistribution.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={analytics.urgencyDistribution}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="urgency" />
+                      <YAxis />
+                      <Tooltip />
+                      <Bar dataKey="count" fill="#8884d8" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-[300px] flex items-center justify-center">
+                    <div className="text-center">
+                      <AlertTriangle className="h-12 w-12 mx-auto text-gray-400 mb-4" />
+                      <p className="text-gray-600">No urgency data available</p>
+                      <p className="text-sm text-gray-500 mt-2">Data will appear once petitions are classified</p>
+                    </div>
+                  </div>
+                )}
               </Card>
             </div>
           </TabsContent>
@@ -322,49 +388,69 @@ const AnalyticsPage: React.FC = () => {
           <TabsContent value="departments" className="space-y-6">
             <Card className="p-6">
               <h3 className="text-lg font-semibold mb-4">Department Performance</h3>
-              <ResponsiveContainer width="100%" height={400}>
-                <BarChart data={analytics.departmentStats}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="department" />
-                  <YAxis />
-                  <Tooltip />
-                  <Legend />
-                  <Bar dataKey="total" fill="#8884d8" name="Total Petitions" />
-                  <Bar dataKey="resolved" fill="#82ca9d" name="Resolved" />
-                  <Bar dataKey="pending" fill="#ffc658" name="Pending" />
-                </BarChart>
-              </ResponsiveContainer>
+              {analytics.departmentStats.length > 0 ? (
+                <ResponsiveContainer width="100%" height={400}>
+                  <BarChart data={analytics.departmentStats}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="department" />
+                    <YAxis />
+                    <Tooltip />
+                    <Legend />
+                    <Bar dataKey="total" fill="#8884d8" name="Total Petitions" />
+                    <Bar dataKey="resolved" fill="#82ca9d" name="Resolved" />
+                    <Bar dataKey="pending" fill="#ffc658" name="Pending" />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-[400px] flex items-center justify-center">
+                  <div className="text-center">
+                    <Filter className="h-12 w-12 mx-auto text-gray-400 mb-4" />
+                    <p className="text-gray-600">No department data available</p>
+                    <p className="text-sm text-gray-500 mt-2">Data will appear once petitions are assigned to departments</p>
+                  </div>
+                </div>
+              )}
             </Card>
           </TabsContent>
 
           <TabsContent value="trends" className="space-y-6">
             <Card className="p-6">
               <h3 className="text-lg font-semibold mb-4">Monthly Trends</h3>
-              <ResponsiveContainer width="100%" height={400}>
-                <AreaChart data={analytics.monthlyTrends}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" />
-                  <YAxis />
-                  <Tooltip />
-                  <Legend />
-                  <Area 
-                    type="monotone" 
-                    dataKey="submitted" 
-                    stackId="1" 
-                    stroke="#8884d8" 
-                    fill="#8884d8" 
-                    name="Submitted"
-                  />
-                  <Area 
-                    type="monotone" 
-                    dataKey="resolved" 
-                    stackId="2" 
-                    stroke="#82ca9d" 
-                    fill="#82ca9d" 
-                    name="Resolved"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
+              {analytics.monthlyTrends.length > 0 ? (
+                <ResponsiveContainer width="100%" height={400}>
+                  <AreaChart data={analytics.monthlyTrends}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="month" />
+                    <YAxis />
+                    <Tooltip />
+                    <Legend />
+                    <Area 
+                      type="monotone" 
+                      dataKey="submitted" 
+                      stackId="1" 
+                      stroke="#8884d8" 
+                      fill="#8884d8" 
+                      name="Submitted"
+                    />
+                    <Area 
+                      type="monotone" 
+                      dataKey="resolved" 
+                      stackId="2" 
+                      stroke="#82ca9d" 
+                      fill="#82ca9d" 
+                      name="Resolved"
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-[400px] flex items-center justify-center">
+                  <div className="text-center">
+                    <TrendingUp className="h-12 w-12 mx-auto text-gray-400 mb-4" />
+                    <p className="text-gray-600">No trend data available</p>
+                    <p className="text-sm text-gray-500 mt-2">Historical trends will appear as petitions are created</p>
+                  </div>
+                </div>
+              )}
             </Card>
           </TabsContent>
 
@@ -376,14 +462,26 @@ const AnalyticsPage: React.FC = () => {
                   analytics.recentActivity.map((activity, index) => (
                     <div key={index} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
                       <div className="flex items-center space-x-3">
-                        <div className="w-2 h-2 bg-blue-600 rounded-full"></div>
+                        <div className={`w-2 h-2 rounded-full ${
+                          activity.type === 'petition_resolved' ? 'bg-green-600' :
+                          activity.type === 'petition_updated' ? 'bg-blue-600' :
+                          activity.type === 'petition_submitted' ? 'bg-yellow-600' :
+                          'bg-gray-600'
+                        }`}></div>
                         <div>
                           <p className="font-medium">{activity.description}</p>
-                          <p className="text-sm text-gray-600">{activity.type}</p>
+                          <p className="text-sm text-gray-600 capitalize">
+                            {activity.type.replace('_', ' ')}
+                          </p>
                         </div>
                       </div>
                       <span className="text-sm text-gray-500">
-                        {new Date(activity.timestamp).toLocaleDateString()}
+                        {new Date(activity.timestamp).toLocaleDateString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
                       </span>
                     </div>
                   ))

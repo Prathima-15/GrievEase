@@ -750,15 +750,6 @@ async def get_analytics(
             for dept, stats in dept_stats.items()
         ]
         
-        # If no department data, provide sample data
-        if not department_stats:
-            department_stats = [
-                {"department": "Public Works", "total": 12, "resolved": 8, "pending": 4},
-                {"department": "Health Department", "total": 8, "resolved": 5, "pending": 3},
-                {"department": "Education", "total": 6, "resolved": 4, "pending": 2},
-                {"department": "Transportation", "total": 10, "resolved": 6, "pending": 4}
-            ]
-        
         # Monthly trends (last 6 months)
         monthly_trends = []
         for i in range(6):
@@ -784,17 +775,6 @@ async def get_analytics(
         
         monthly_trends.reverse()  # Show oldest to newest
         
-        # If no monthly data, provide sample data
-        if not monthly_trends or all(trend["submitted"] == 0 for trend in monthly_trends):
-            monthly_trends = [
-                {"month": "Apr 2025", "submitted": 8, "resolved": 6},
-                {"month": "May 2025", "submitted": 12, "resolved": 10},
-                {"month": "Jun 2025", "submitted": 15, "resolved": 11},
-                {"month": "Jul 2025", "submitted": 18, "resolved": 14},
-                {"month": "Aug 2025", "submitted": 22, "resolved": 17},
-                {"month": "Sep 2025", "submitted": 16, "resolved": 12}
-            ]
-        
         # Urgency distribution
         urgency_counts = {}
         for petition in petitions:
@@ -805,15 +785,6 @@ async def get_analytics(
             {"urgency": urgency, "count": count}
             for urgency, count in urgency_counts.items()
         ]
-        
-        # If no data, provide sample data for demo
-        if not urgency_distribution:
-            urgency_distribution = [
-                {"urgency": "low", "count": 5},
-                {"urgency": "medium", "count": 15},
-                {"urgency": "high", "count": 8},
-                {"urgency": "critical", "count": 2}
-            ]
         
         # Enhanced recent activity with actual data
         recent_activity = []
@@ -841,31 +812,6 @@ async def get_analytics(
                 })
         except Exception as e:
             print(f"Error fetching recent petitions: {e}")
-        
-        # If no real activity, provide sample data
-        if not recent_activity:
-            recent_activity = [
-                {
-                    "type": "petition_submitted",
-                    "description": "New petition submitted to Public Works",
-                    "timestamp": (datetime.utcnow() - timedelta(hours=2)).isoformat()
-                },
-                {
-                    "type": "petition_resolved",
-                    "description": "Road maintenance petition marked as resolved",
-                    "timestamp": (datetime.utcnow() - timedelta(hours=5)).isoformat()
-                },
-                {
-                    "type": "petition_updated",
-                    "description": "Healthcare petition status updated to in progress",
-                    "timestamp": (datetime.utcnow() - timedelta(hours=8)).isoformat()
-                },
-                {
-                    "type": "officer_registered",
-                    "description": "New officer registered in Education department",
-                    "timestamp": (datetime.utcnow() - timedelta(days=1)).isoformat()
-                }
-            ]
         
         # Sort by timestamp and limit
         recent_activity.sort(key=lambda x: x["timestamp"], reverse=True)
@@ -2052,12 +1998,26 @@ async def notify_user_petitions(user_id: int, petitions: List[Petition]):
     # Serialize petitions
     def serialize_petition(p: Petition):
         try:
+            # Ensure JSON-serializable fields (avoid ORM objects)
+            try:
+                cat = getattr(p, "category", None)
+                # Category can be a string, FK id, or ORM object – normalize to string
+                if isinstance(cat, Category):
+                    category_value = cat.name or "Unknown"
+                elif isinstance(cat, str) or cat is None:
+                    category_value = cat or "Unknown"
+                else:
+                    # Fallback to string to ensure JSON serializable (e.g., int id)
+                    category_value = str(cat)
+            except Exception:
+                category_value = "Unknown"
+
             return {
                 "petition_id": p.petition_id,
                 "title": p.title,
                 "description": p.description,
                 "short_description": p.short_description,
-                "category": p.category if p.category else "Unknown",
+                "category": category_value,
                 "status": p.status,
                 "signatureCount": 0,  # Add signature count logic if needed
                 "submitted_at": p.submitted_at.isoformat() if p.submitted_at else None,

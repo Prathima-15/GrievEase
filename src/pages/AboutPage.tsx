@@ -137,8 +137,8 @@ const AboutPage: React.FC = () => {
                 alt="Team Member"
                 className="w-32 h-32 rounded-full mx-auto mb-4 object-cover"
               />
-              <h3 className="font-semibold text-lg">Anita Desai</h3>
-              <p className="text-gray-600">Founder & CEO</p>
+              <h3 className="font-semibold text-lg">Sindhu L</h3>
+              <p className="text-gray-600">Mentor</p>
             </div>
             
             <div className="text-center">
@@ -147,8 +147,8 @@ const AboutPage: React.FC = () => {
                 alt="Team Member"
                 className="w-32 h-32 rounded-full mx-auto mb-4 object-cover"
               />
-              <h3 className="font-semibold text-lg">Rajesh Kumar</h3>
-              <p className="text-gray-600">Chief Technology Officer</p>
+              <h3 className="font-semibold text-lg">Sadhasivam Arumugam</h3>
+              <p className="text-gray-600">JMAN</p>
             </div>
             
             <div className="text-center">
@@ -157,8 +157,8 @@ const AboutPage: React.FC = () => {
                 alt="Team Member"
                 className="w-32 h-32 rounded-full mx-auto mb-4 object-cover"
               />
-              <h3 className="font-semibold text-lg">Priya Sharma</h3>
-              <p className="text-gray-600">Head of Operations</p>
+              <h3 className="font-semibold text-lg">Praveen Raj M A</h3>
+              <p className="text-gray-600">Data Corp</p>
             </div>
 
             <div className="text-center">
@@ -167,8 +167,8 @@ const AboutPage: React.FC = () => {
                 alt="Team Member"
                 className="w-32 h-32 rounded-full mx-auto mb-4 object-cover"
               />
-              <h3 className="font-semibold text-lg">Priya Sharma</h3>
-              <p className="text-gray-600">Head of Operations</p>
+              <h3 className="font-semibold text-lg">Sri Rama Krishnan</h3>
+              <p className="text-gray-600">Capgemini</p>
             </div>
           </div>
         </div>
