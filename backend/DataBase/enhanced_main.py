@@ -1625,7 +1625,7 @@ Be strict but fair. Only mark as invalid if the update is clearly irrelevant, sp
                     verification_result["ai_available"] = True
                     
                     # Log verification result
-                    print(f"🤖 AI Verification Result for Petition #{petition_id}:")
+                    print(f"AI Verification Result for Petition #{petition_id}:")
                     print(f"   Valid: {verification_result.get('is_valid')}")
                     print(f"   Confidence: {verification_result.get('confidence')}%")
                     print(f"   Reason: {verification_result.get('reason')}")
@@ -1767,26 +1767,162 @@ async def update_petition_status(
         # Send email to user notifying about status update
         user = db.query(User).filter(User.user_id == petition.user_id).first()
         if user and user.email:
-            subject = f"Your Petition #{petition.petition_id} Status Updated: {status.title()}"
-            # Build proof file links if any
-            proof_links = ""
+            subject = f"✅ Petition Update: {status.title()} - GrievEase"
+            
+            # Build proof file cards if any
+            proof_files_html = ""
             if uploaded_files:
-                proof_links = "<li><b>Proof Files:</b><ul>"
+                proof_files_html = """
+                <div style="margin: 20px 0;">
+                    <h3 style="color: #1e40af; font-size: 16px; margin-bottom: 12px;">📎 Proof Files Attached:</h3>
+                    <div style="display: flex; flex-direction: column; gap: 8px;">
+                """
                 for fname in uploaded_files:
                     url = f"http://localhost:8000/uploads/{fname}"
-                    proof_links += f'<li><a href="{url}" target="_blank">{fname}</a></li>'
-                proof_links += "</ul></li>"
+                    file_ext = fname.split('.')[-1].upper() if '.' in fname else 'FILE'
+                    proof_files_html += f"""
+                        <a href="{url}" target="_blank" style="display: flex; align-items: center; padding: 12px 16px; background: #f3f4f6; border-radius: 8px; text-decoration: none; color: #1f2937; border-left: 4px solid #3b82f6; transition: all 0.2s;">
+                            <span style="background: #3b82f6; color: white; padding: 4px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; margin-right: 12px;">{file_ext}</span>
+                            <span style="flex: 1; font-size: 14px;">{fname}</span>
+                            <span style="color: #3b82f6; font-size: 14px;">→</span>
+                        </a>
+                    """
+                proof_files_html += """
+                    </div>
+                </div>
+                """
+            
+            # Status color mapping
+            status_colors = {
+                'submitted': {'bg': '#dbeafe', 'text': '#1e40af', 'icon': '📝'},
+                'under_review': {'bg': '#fef3c7', 'text': '#92400e', 'icon': '🔍'},
+                'in_progress': {'bg': '#e0e7ff', 'text': '#4338ca', 'icon': '⚙️'},
+                'resolved': {'bg': '#d1fae5', 'text': '#065f46', 'icon': '✅'},
+                'rejected': {'bg': '#fee2e2', 'text': '#991b1b', 'icon': '❌'},
+                'escalated': {'bg': '#fed7aa', 'text': '#9a3412', 'icon': '⬆️'}
+            }
+            
+            status_info = status_colors.get(status, {'bg': '#e5e7eb', 'text': '#374151', 'icon': '📋'})
+            
             body = f"""
-            <h2>Dear {user.first_name},</h2>
-            <p>Your petition <b>\"{petition.title}\"</b> has been updated by the admin.</p>
-            <ul>
-                <li><b>Status:</b> {status.title()}</li>
-                {f'<li><b>Admin Comment:</b> {admin_comment}</li>' if admin_comment else ''}
-                {proof_links}
-            </ul>
-            <p>You can view the details and any uploaded proof files by logging in to GrievEase.</p>
-            <br>
-            <p>Thank you,<br>GrievEase Team</p>
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Petition Status Update</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f9fafb;">
+    <table role="presentation" style="width: 100%; border-collapse: collapse;">
+        <tr>
+            <td style="padding: 40px 20px;">
+                <table role="presentation" style="max-width: 600px; margin: 0 auto; background: white; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); overflow: hidden;">
+                    
+                    <!-- Header -->
+                    <tr>
+                        <td style="background: linear-gradient(135deg, #3b82f6 0%, #1e40af 100%); padding: 32px 40px; text-align: center;">
+                            <h1 style="margin: 0; color: white; font-size: 28px; font-weight: 700; letter-spacing: -0.5px;">
+                                🏛️ GrievEase
+                            </h1>
+                            <p style="margin: 8px 0 0 0; color: #dbeafe; font-size: 14px; font-weight: 500;">
+                                Citizen Petition Management System
+                            </p>
+                        </td>
+                    </tr>
+                    
+                    <!-- Main Content -->
+                    <tr>
+                        <td style="padding: 40px;">
+                            
+                            <!-- Greeting -->
+                            <h2 style="margin: 0 0 24px 0; color: #111827; font-size: 22px; font-weight: 600;">
+                                Dear {user.first_name} {user.last_name},
+                            </h2>
+                            
+                            <!-- Update Notice -->
+                            <div style="background: #eff6ff; border-left: 4px solid #3b82f6; padding: 16px 20px; border-radius: 8px; margin-bottom: 24px;">
+                                <p style="margin: 0; color: #1e40af; font-size: 15px; font-weight: 600;">
+                                    📢 Your petition has been updated by our team!
+                                </p>
+                            </div>
+                            
+                            <!-- Petition Title -->
+                            <div style="background: #f9fafb; border-radius: 8px; padding: 20px; margin-bottom: 24px;">
+                                <p style="margin: 0 0 8px 0; color: #6b7280; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;">
+                                    Petition #{petition.petition_id}
+                                </p>
+                                <h3 style="margin: 0; color: #111827; font-size: 18px; font-weight: 600; line-height: 1.4;">
+                                    {petition.title}
+                                </h3>
+                            </div>
+                            
+                            <!-- Status Badge -->
+                            <div style="margin-bottom: 24px;">
+                                <p style="margin: 0 0 12px 0; color: #6b7280; font-size: 14px; font-weight: 600;">
+                                    Current Status:
+                                </p>
+                                <div style="display: inline-block; background: {status_info['bg']}; color: {status_info['text']}; padding: 12px 24px; border-radius: 8px; font-weight: 600; font-size: 16px;">
+                                    {status_info['icon']} {status.replace('_', ' ').title()}
+                                </div>
+                            </div>
+                            
+                            <!-- Admin Comment -->
+                            {f'''
+                            <div style="background: #fefce8; border-left: 4px solid #eab308; padding: 20px; border-radius: 8px; margin-bottom: 24px;">
+                                <p style="margin: 0 0 8px 0; color: #854d0e; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;">
+                                    💬 Admin Comment
+                                </p>
+                                <p style="margin: 0; color: #713f12; font-size: 15px; line-height: 1.6; font-style: italic;">
+                                    "{admin_comment}"
+                                </p>
+                            </div>
+                            ''' if admin_comment else ''}
+                            
+                            <!-- Proof Files -->
+                            {proof_files_html}
+                            
+                            <!-- CTA Button -->
+                            <div style="text-align: center; margin: 32px 0;">
+                                <a href="http://localhost:5173/petitions/{petition.petition_id}" 
+                                   style="display: inline-block; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 16px; box-shadow: 0 4px 6px rgba(59, 130, 246, 0.3); transition: all 0.2s;">
+                                    📋 View Full Details
+                                </a>
+                            </div>
+                            
+                            <!-- Info Box -->
+                            <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 16px; margin-top: 24px;">
+                                <p style="margin: 0; color: #166534; font-size: 13px; line-height: 1.6;">
+                                    💡 <strong>Tip:</strong> You can track all updates and communicate with our team by logging into your GrievEase dashboard.
+                                </p>
+                            </div>
+                            
+                        </td>
+                    </tr>
+                    
+                    <!-- Footer -->
+                    <tr>
+                        <td style="background: #f9fafb; padding: 32px 40px; border-top: 1px solid #e5e7eb;">
+                            <p style="margin: 0 0 16px 0; color: #111827; font-size: 14px; font-weight: 600;">
+                                Thank you for using GrievEase! 🙏
+                            </p>
+                            <p style="margin: 0 0 8px 0; color: #6b7280; font-size: 13px; line-height: 1.6;">
+                                We're committed to resolving your concerns efficiently. If you have any questions, please don't hesitate to reach out.
+                            </p>
+                            <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
+                                <p style="margin: 0; color: #9ca3af; font-size: 12px; text-align: center;">
+                                    © 2025 GrievEase | Citizen Petition Management System<br>
+                                    <span style="color: #d1d5db;">This is an automated email. Please do not reply to this message.</span>
+                                </p>
+                            </div>
+                        </td>
+                    </tr>
+                    
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
             """
             send_email(user.email, subject, body)
 
